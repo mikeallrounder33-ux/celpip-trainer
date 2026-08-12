@@ -493,16 +493,11 @@ function reviewDetail(a) {
     dims.appendChild(dimCard('Task Fulfillment', D.task_fulfillment, ''));
     wrap.appendChild(dims);
 
-    const three = el('div', { class: 'grid g3' });
-    const m1 = el('div', { class: 'card' });
-    m1.innerHTML = '<h3>' + (a.module === 'writing' ? 'Your answer' : 'Your transcript') + '</h3><div class="passage">' + highlightTemplates(a.response || '') + '</div>';
-    const m2 = el('div', { class: 'card' });
-    m2.innerHTML = '<h3>Rater feedback</h3><ol class="clean">' + ((a.rating && a.rating.top_3_fixes) || []).map(f => '<li>' + esc(f) + '</li>').join('') + '</ol>' +
+    const fb = el('div', { class: 'card' });
+    fb.innerHTML = '<h3>Rater feedback</h3><ol class="clean">' + ((a.rating && a.rating.top_3_fixes) || []).map(f => '<li>' + esc(f) + '</li>').join('') + '</ol>' +
       (a.errors && a.errors.length ? '<h4 style="margin-top:12px">Errors logged</h4>' + a.errors.map(e => '<div class="small">· <span class="tag grey">' + esc(e.type) + '</span> ' + esc(e.mine) + ' → <strong>' + esc(e.correct) + '</strong></div>').join('') : '');
-    const m3 = el('div', { class: 'card' });
-    m3.innerHTML = '<h3>Model rewrite</h3><div class="passage">' + esc((a.rating && a.rating.rewritten_sample) || '—').replace(/\n/g, '<br>') + '</div>';
-    three.appendChild(m1); three.appendChild(m2); three.appendChild(m3);
-    wrap.appendChild(three);
+    wrap.appendChild(fb);
+    wrap.appendChild(answerPanels(a, a.rating || {}, a.module === 'writing'));
     setScreen(wrap);
     return;
   }

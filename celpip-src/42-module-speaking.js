@@ -282,6 +282,8 @@ const Speaking = {
 
       const res = await rateResponse('speaking', tk.item, tk.transcript, tk.usedPct, tk.respSec);
       const tp = detectTemplates(tk.transcript);
+      const corrected = buildCorrected(tk.transcript, res.rating.errors || [], tp);
+      const reference = await getReference(tk.item, 'speaking');
       const errs = (res.rating.errors || []).map(e => ({ type: e.type || 'other', mine: e.mine, correct: e.correct }));
       logErrors(errs);
 
@@ -289,7 +291,7 @@ const Speaking = {
       if (tk.blob) MEM.audio[id] = URL.createObjectURL(tk.blob);
       const attempt = {
         id, ts: Date.now(), module: 'speaking', mode: s.cfg.mode, task: tk.item.task,
-        item: tk.item, response: tk.transcript, wordCount: words(tk.transcript),
+        item: tk.item, response: tk.transcript, wordCount: words(tk.transcript), corrected, reference,
         rating: res.rating, ratingSource: res.source, ratingProvider: API.providerName() + " · " + (DB.settings().provider === "browser" ? (BrowserLLM.modelId || "") : DB.settings().model),
         analysis: { templates: tp, register: { want: 'n/a', flags: [] }, bulletsCovered: [] },
         clbNum: res.rating.overall_clb, clb: 'CLB ' + res.rating.overall_clb,

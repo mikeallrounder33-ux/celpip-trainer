@@ -413,7 +413,7 @@ const HOMOPHONES = [
   [/\bthere\s+(car|house|team|kids|children|manager|idea|opinion|family|apartment|dog)\b/gi, 'there $1', 'their $1', 'homophone confusion'],
   [/\byour\s+(welcome|right|wrong|going|coming|invited)\b/gi, 'your $1', "you're $1", 'homophone confusion'],
   [/\byou'?re\s+(car|house|help|email|team|idea|reply)\b/gi, "you're $1", 'your $1', 'homophone confusion'],
-  [/\bits\s+(a |the |been |going |very |important|clear|not )/gi, 'its …', "it's …", 'homophone confusion'],
+  [/\bits\s+(a|the|been|going|very|important|clear|not)\b/gi, 'its $1', "it's $1", 'homophone confusion'],
   [/\bits\s+(affecting|going|getting|becoming|causing|making|taking|being|working|happening)\b/gi, 'its $1', "it's $1", 'homophone confusion'],
   [/\bit'?s\s+(own|purpose|price|value|design)\b/gi, "it's $1", 'its $1', 'homophone confusion'],
   [/\bto\s+(much|many|late|early|expensive|noisy|slow)\b/gi, 'to $1', 'too $1', 'homophone confusion'],
@@ -434,6 +434,11 @@ const AGREEMENT = [
     m => { const p = m.split(/\s+/); return p[0] + ' ' + (THIRD_PERSON[p[1].toLowerCase()] || p[1] + 's'); },
     'dropped verb forms and auxiliaries'],
   [/\b(they|we|you)\s+(has|does|is)\b/gi, '$1 $2', '$1 (have/do/are)', 'dropped verb forms and auxiliaries'],
+  /* Singular noun subjects take the -s form too: "my mother use" → "my mother uses". */
+  [/\b((?:my|his|her|our|their|the|this|that)\s+(?:mother|father|sister|brother|friend|manager|teacher|son|daughter|wife|husband|neighbour|neighbor|company|employer|child|doctor|landlord|supervisor|partner|cousin|aunt|uncle))\s+(have|do|go|say|make|take|know|need|want|think|live|work|use|come|seem|look)\b/gi,
+    '$1 $2',
+    m => { const p = m.split(/\s+/); const v = p.pop().toLowerCase(); return p.join(' ') + ' ' + (THIRD_PERSON[v] || (/[sxz]$|ch$|sh$/.test(v) ? v + 'es' : v + 's')); },
+    'dropped verb forms and auxiliaries'],
   [/\b(I)\s+(is|has|are)\b/g, 'I $2', 'I am / I have', 'dropped verb forms and auxiliaries'],
   [/\b(is|are|was|were)\s+(go|come|work|wait|look|try)\b(?!\w)/gi, '$1 $2', '$1 $2ing', 'dropped verb forms and auxiliaries'],
   [/\bdid\s+(went|came|saw|took|made|had)\b/gi, 'did $1', 'did (go/come/see/take/make/have)', 'dropped verb forms and auxiliaries'],
@@ -508,8 +513,14 @@ function detectErrorsLocal(text) {
   });
 
   // sentence-initial capitals
+  // Log capitalisation compactly. The correction is parenthesised so the
+  // "corrected" builder treats it as advice rather than a literal replacement
+  // (it fixes sentence capitals itself, in one pass).
   sentences(T).forEach(s => {
-    if (/^[a-z]/.test(s) && s.length > 3) push('missing end punctuation', s.slice(0, 40), s[0].toUpperCase() + s.slice(1, 40));
+    if (/^[a-z]/.test(s) && s.length > 3) {
+      push('missing end punctuation', 'lower-case sentence start: "' + s.split(/\s+/).slice(0, 4).join(' ') + '…"',
+        '(capitalise the first letter)');
+    }
   });
   if (/\bi\b/.test(T)) push('spelling', 'lowercase "i"', 'I');
 

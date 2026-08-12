@@ -442,6 +442,85 @@ function heuristicRate(kind, item, text, analysis) {
   };
 }
 
+/* ---------------- 30.6b "Your answer, corrected" (works offline) ----------------
+   Applies every concrete correction back into the candidate's own text, so they
+   see their own words with the errors repaired — distinct from the rewrite,
+   which restructures. Advisory notes are skipped: they are instructions, not
+   replacements. */
+function buildCorrected(text, errors, templates) {
+  let out = String(text || '');
+  const advisory = /^(Split into|Use a period|Match the salutation|\()/i;
+
+  (errors || []).forEach(e => {
+    if (!e.mine || !e.correct || advisory.test(e.correct)) return;
+    if (e.mine.length > 70 || e.mine === 'lowercase "i"' || /^…/.test(e.mine)) return;
+    try {
+      out = out.replace(new RegExp(e.mine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), e.correct);
+    } catch (err) { /* unbalanced pattern — skip that one */ }
+  });
+
+  out = out.replace(/\bi\b/g, 'I');
+  out = out.replace(/([.!?]\s+)([a-z])/g, (m, p, c) => p + c.toUpperCase());
+  out = out.replace(/^(\s*)([a-z])/, (m, sp, c) => sp + c.toUpperCase());
+
+  const lines = out.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i].trim()) continue;
+    if (words(lines[i]) > 4 && !/[.!?]$/.test(lines[i].trim())) lines[i] = lines[i].replace(/\s*$/, '.');
+    break;
+  }
+  out = lines.join('\n');
+
+  return {
+    text: out,
+    changed: out !== String(text || ''),
+    templateSwaps: templates && templates.hits.length ? templates.hits.map(h => '“' + h.name + '” → ' + h.alt[0]) : []
+  };
+}
+
+/* ---------------- 30.6c reference (exemplar) answer ---------------- */
+function bankReference(item) {
+  if (item && item.ref) return { text: item.ref, source: 'bank' };
+  if (typeof REFERENCE_ANSWERS !== 'undefined' && item && REFERENCE_ANSWERS[item.id]) {
+    return { text: REFERENCE_ANSWERS[item.id], source: 'bank' };
+  }
+  return null;
+}
+
+async function getReference(item, kind) {
+  const banked = bankReference(item);
+  if (banked) return banked;
+  if (!API.available()) {
+    return {
+      text: '(This item was generated, so no stored reference answer exists, and no model is connected to write one. ' +
+        'Every item in the built-in bank ships with a reference answer.)', source: 'none'
+    };
+  }
+  const secs = SPEAKING_SPEC[item.task] ? SPEAKING_SPEC[item.task].resp : 60;
+  const prompt = kind === 'writing'
+    ? (item.task === 1
+      ? 'Write a model CELPIP-General Writing Task 1 email for the prompt below, at CLB 10-11. Exactly 170-190 words. ' +
+        'Address all three bullets. Match the register to the recipient. Use NO memorised scaffolding phrases such as ' +
+        '"I hope this email finds you well" or "I am writing this email to". Include at least two concrete specifics ' +
+        '(a date, a number, a name).\n\nSCENARIO: ' + item.scenario + '\nRECIPIENT: ' + item.recipient +
+        ' (register: ' + item.formality + ')\nBULLETS:\n- ' + item.bullets.join('\n- ') + '\n\nOutput only the email.'
+      : 'Write a model CELPIP-General Writing Task 2 survey response at CLB 10-11. Exactly 170-190 words. Choose ONE ' +
+        'option explicitly, defend it with two developed reasons and a concrete example, and concede one genuine ' +
+        'strength of the option not chosen. No memorised scaffolding phrases.\n\nSCENARIO: ' + item.scenario +
+        '\nOPTION A: ' + item.optionA.label + ' — ' + item.optionA.desc +
+        '\nOPTION B: ' + item.optionB.label + ' — ' + item.optionB.desc + '\n\nOutput only the response.')
+    : 'Write a model CELPIP-General Speaking response at CLB 10-11 as natural spoken English, about ' +
+      Math.round(secs * 2.2) + ' words (' + secs + ' seconds). Contractions are fine. No filler words, no memorised ' +
+      'openers.\n\nTASK: ' + (item.prompt || (item.context + ' Option A: ' + ((item.optionA || {}).label || '') +
+        '. Option B: ' + ((item.optionB || {}).label || ''))) + '\n\nOutput only the spoken response.';
+  try {
+    const out = await API.call('You write exemplar answers for English language test preparation. Output only the answer text.', prompt, 700);
+    return { text: String(out).trim(), source: 'model' };
+  } catch (e) {
+    return { text: '(Could not generate a reference answer: ' + e.message + ')', source: 'none' };
+  }
+}
+
 /* ---------------- 30.7 bullet coverage detection ---------------- */
 const STOP = new Set(('a an the and or but of to in on for with your you my me is are was were be been it its this that ' +
   'about from as at by if then than so not no do does did have has had will would can could should one two three ' +

@@ -214,6 +214,10 @@ const Writing = {
 
     const res = await rateResponse('writing', item, s.text, usedPct, null);
     const tp = detectTemplates(s.text);
+
+    wait.innerHTML = '<div class="card"><h2>Preparing your reference answer…</h2></div>';
+    const corrected = buildCorrected(s.text, res.rating.errors || [], tp);
+    const reference = await getReference(item, 'writing');
     const reg = item.task === 1 ? checkRegister(s.text, item) : { want: 'n/a', flags: [], ok: true };
 
     // recurring error log (feature 4)
@@ -223,7 +227,7 @@ const Writing = {
 
     const attempt = {
       id: uid(), ts: Date.now(), module: 'writing', mode: s.cfg.mode, task: item.task,
-      item, response: s.text, wordCount: words(s.text),
+      item, response: s.text, wordCount: words(s.text), corrected, reference,
       rating: res.rating, ratingSource: res.source, ratingProvider: API.providerName() + " · " + (DB.settings().provider === "browser" ? (BrowserLLM.modelId || "") : DB.settings().model), analysis: {
         templates: tp, register: reg, bulletsCovered: res.rating.bullets_covered || res.analysis.bulletsCovered
       },
@@ -261,6 +265,51 @@ function dimCard(label, d, note) {
     '<div class="tiny muted" style="margin:6px 0 8px">' + esc(note || '') + '</div>' +
     '<div class="small"><strong>What caps it:</strong> <em>“' + esc(String((d && d.evidence) || '—')).slice(0, 300) + '”</em></div>' +
     '<div class="small" style="margin-top:6px"><strong>Fix:</strong> ' + esc((d && d.fix) || '—') + '</div>';
+  return box;
+}
+
+/* Four ways to look at the same answer: what you wrote, the same thing with the
+   errors repaired, the same ideas one band higher, and an independent model
+   answer to the same prompt. */
+function answerPanels(a, r, isW) {
+  const box = el('div');
+  const corr = a.corrected || { text: a.response || '', changed: false, templateSwaps: [] };
+  const ref = a.reference || { text: '—', source: 'none' };
+
+  const row1 = el('div', { class: 'grid g2' });
+  const mine = el('div', { class: 'card' });
+  mine.innerHTML = '<h3>1 · ' + (isW ? 'What you wrote' : 'What you said') + '</h3>' +
+    '<p class="tiny muted">Highlighted spans are memorised scaffolding the marker discounts.</p>' +
+    '<div class="passage">' + highlightTemplates(a.response || '') + '</div>';
+
+  const fixed = el('div', { class: 'card' });
+  fixed.innerHTML = '<h3>2 · Your answer, corrected</h3>' +
+    '<p class="tiny muted">Your own words and structure, with every error found repaired. Compare it line by line against panel 1 — the differences are your habits.</p>' +
+    '<div class="passage">' + esc(corr.text).replace(/\n/g, '<br>') + '</div>' +
+    (corr.changed ? '' : '<div class="flagline ok" style="margin-top:8px">No mechanical errors were found to repair.</div>') +
+    (corr.templateSwaps && corr.templateSwaps.length
+      ? '<div class="flagline" style="margin-top:8px"><strong>Still to swap by hand:</strong><br>' +
+        corr.templateSwaps.map(t => esc(t)).join('<br>') + '</div>' : '');
+  row1.appendChild(mine); row1.appendChild(fixed);
+  box.appendChild(row1);
+
+  const row2 = el('div', { class: 'grid g2' });
+  const up = el('div', { class: 'card' });
+  up.innerHTML = '<h3>3 · Your ideas, one band higher</h3>' +
+    '<p class="tiny muted">The same content, restructured and reworded as a stronger candidate would put it.</p>' +
+    '<div class="passage">' + esc(r.rewritten_sample || '—').replace(/\n/g, '<br>') + '</div>';
+
+  const refCard = el('div', { class: 'card', style: 'border-color:#8fcdb4' });
+  refCard.innerHTML = '<h3>4 · Reference answer <span class="tag ok">CLB 10–11</span></h3>' +
+    '<p class="tiny muted">An independent model answer to the same prompt — not based on what you wrote. ' +
+    'Read it for structure and for how it makes ideas specific. ' +
+    (ref.source === 'bank' ? 'Written for this item.' : ref.source === 'model' ? 'Generated for this item.' : '') + '</p>' +
+    '<div class="passage">' + esc(ref.text || '—').replace(/\n/g, '<br>') + '</div>' +
+    (ref.source !== 'none'
+      ? '<p class="tiny muted" style="margin-top:8px">Do not memorise it. Copying a model answer is exactly what the ' +
+        'template detector penalises. Take the <em>moves</em> it makes, not its sentences.</p>' : '');
+  row2.appendChild(up); row2.appendChild(refCard);
+  box.appendChild(row2);
   return box;
 }
 
@@ -357,14 +406,7 @@ function showProductiveResult(a) {
     wrap.appendChild(ec);
   }
 
-  // side-by-side
-  const sbs = el('div', { class: 'grid g2' });
-  const mine = el('div', { class: 'card' });
-  mine.innerHTML = '<h3>' + (isW ? 'Your response' : 'Your transcript') + '</h3><div class="passage">' + highlightTemplates(a.response || '') + '</div>';
-  const model = el('div', { class: 'card' });
-  model.innerHTML = '<h3>Rewritten one band higher</h3><div class="passage">' + esc(r.rewritten_sample || '—').replace(/\n/g, '<br>') + '</div>';
-  sbs.appendChild(mine); sbs.appendChild(model);
-  wrap.appendChild(sbs);
+  wrap.appendChild(answerPanels(a, r, isW));
 
   const row = el('div', { class: 'row' });
   const b1 = el('button', { class: 'btn', text: 'Back to dashboard' });
