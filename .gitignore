@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# editor / tooling
+.vscode/
+.idea/
+.claude/
+
+# nothing here is built by a package manager, but just in case
+node_modules/
+
+# never commit exported practice history — it is personal
+celpip-history-*.json

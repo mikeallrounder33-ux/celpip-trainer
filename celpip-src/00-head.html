@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<!-- ============================================================
+     PART 00 — HEAD, STYLES, APP SHELL
+     CELPIP-General Practice Platform (single-file, no build step)
+     ============================================================ -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CELPIP-General Trainer</title>
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#ffffff; --ink:#15181d; --muted:#5d6673; --line:#dfe3e9;
+  --brand:#1f5fd0; --brand-dk:#17439a; --ok:#12805c; --warn:#b06a00; --bad:#c0332e;
+  --soft:#eef3fd; --radius:10px; --shadow:0 1px 3px rgba(20,25,35,.09),0 6px 18px rgba(20,25,35,.05);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink); font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{margin:0 0 .5em; line-height:1.25; font-weight:650}
+h1{font-size:22px} h2{font-size:19px} h3{font-size:16px} h4{font-size:14px}
+p{margin:0 0 .8em}
+a{color:var(--brand)}
+button{font:inherit}
+code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em}
+
+/* ---------- shell ---------- */
+.topbar{
+  position:sticky; top:0; z-index:40; background:#fff; border-bottom:1px solid var(--line);
+  display:flex; align-items:center; gap:14px; padding:10px 18px; flex-wrap:wrap;
+}
+.logo{font-weight:750; letter-spacing:-.02em; font-size:16px; white-space:nowrap}
+.logo span{color:var(--brand)}
+.nav{display:flex; gap:4px; flex-wrap:wrap}
+.nav button{
+  background:transparent; border:1px solid transparent; color:var(--muted); padding:6px 11px;
+  border-radius:8px; cursor:pointer; font-size:14px; font-weight:550;
+}
+.nav button:hover{background:var(--soft); color:var(--brand-dk)}
+.nav button.on{background:var(--brand); color:#fff}
+.spacer{flex:1}
+.wrap{max-width:1080px; margin:0 auto; padding:22px 18px 90px}
+.wrap.wide{max-width:1280px}
+
+/* ---------- generic ---------- */
+.card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); margin-bottom:16px}
+.card.tight{padding:13px 15px}
+.grid{display:grid; gap:14px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:860px){.g2,.g3,.g4{grid-template-columns:1fr}}
+.row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.tiny{font-size:12px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.right{text-align:right}
+.center{text-align:center}
+hr{border:0;border-top:1px solid var(--line); margin:16px 0}
+
+.btn{
+  background:var(--brand); color:#fff; border:1px solid var(--brand); padding:9px 16px;
+  border-radius:8px; cursor:pointer; font-weight:600; font-size:14px;
+}
+.btn:hover{background:var(--brand-dk); border-color:var(--brand-dk)}
+.btn:disabled{opacity:.45; cursor:not-allowed}
+.btn.ghost{background:#fff; color:var(--brand-dk); border-color:var(--line)}
+.btn.ghost:hover{background:var(--soft)}
+.btn.danger{background:var(--bad); border-color:var(--bad)}
+.btn.warn{background:var(--warn); border-color:var(--warn)}
+.btn.sm{padding:5px 11px; font-size:13px}
+.btn.lg{padding:12px 22px; font-size:15px}
+
+input[type=text],input[type=password],input[type=number],select,textarea{
+  font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); width:100%;
+}
+textarea{resize:vertical}
+label.fl{display:block; font-weight:600; font-size:13px; margin-bottom:5px}
+
+.tag{display:inline-block; padding:2px 8px; border-radius:999px; font-size:11.5px; font-weight:650; background:var(--soft); color:var(--brand-dk); white-space:nowrap}
+.tag.ok{background:#e4f5ee; color:var(--ok)}
+.tag.bad{background:#fdeceb; color:var(--bad)}
+.tag.warn{background:#fdf1e0; color:var(--warn)}
+.tag.grey{background:#eef0f3; color:var(--muted)}
+
+table{border-collapse:collapse; width:100%; font-size:14px}
+th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top}
+th{font-size:12.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:650}
+tbody tr:hover{background:#fafbfc}
+
+/* ---------- exam chrome ---------- */
+.exambar{
+  position:sticky; top:0; z-index:35; background:#fff; border-bottom:1px solid var(--line);
+  display:flex; align-items:center; gap:14px; padding:10px 18px;
+}
+.clock{font-variant-numeric:tabular-nums; font-weight:750; font-size:20px; letter-spacing:.02em}
+.clock.low{color:var(--bad)}
+.bar{height:6px; background:#e8ebef; border-radius:999px; overflow:hidden; width:100%}
+.bar>i{display:block; height:100%; background:var(--brand); border-radius:999px; transition:width .3s linear}
+.bar.low>i{background:var(--bad)}
+
+.passage{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:20px 22px; line-height:1.65; font-size:15.5px}
+.passage h4{margin-top:0}
+.letterhead{border-bottom:1px dashed var(--line); padding-bottom:10px; margin-bottom:12px; font-size:13.5px; color:var(--muted)}
+
+.qblock{border:1px solid var(--line); border-radius:var(--radius); background:#fff; padding:14px 16px; margin-bottom:12px}
+.qtext{font-weight:600; margin-bottom:9px}
+.opt{display:flex; gap:10px; align-items:flex-start; padding:8px 10px; border:1px solid var(--line); border-radius:8px; margin-bottom:7px; cursor:pointer; background:#fff}
+.opt:hover{background:var(--soft); border-color:#c9d8f4}
+.opt.sel{background:var(--soft); border-color:var(--brand)}
+.opt.correct{background:#e9f7f1; border-color:#7dc9ac}
+.opt.wrong{background:#fdeded; border-color:#eaa9a5}
+.opt input{margin-top:3px}
+.optk{font-weight:700; color:var(--muted); min-width:16px}
+
+.blank{display:inline-block; min-width:150px; margin:0 3px; vertical-align:baseline}
+.blank select{padding:3px 6px; font-size:14px; width:auto; min-width:150px}
+
+/* ---------- modal ---------- */
+.modalbg{position:fixed; inset:0; background:rgba(15,20,28,.55); display:flex; align-items:center; justify-content:center; z-index:100; padding:20px}
+.modal{background:#fff; border-radius:12px; max-width:600px; width:100%; padding:24px; box-shadow:0 20px 60px rgba(0,0,0,.3); max-height:88vh; overflow:auto}
+
+/* ---------- speaking / recording ---------- */
+.pulse{width:12px;height:12px;border-radius:50%;background:var(--bad);display:inline-block;animation:pl 1.1s infinite}
+@keyframes pl{0%,100%{opacity:1}50%{opacity:.25}}
+.bigtimer{font-size:56px; font-weight:750; font-variant-numeric:tabular-nums; letter-spacing:-.02em; text-align:center; margin:10px 0}
+.stage{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:26px;text-align:center}
+
+/* ---------- misc ---------- */
+.flagline{border-left:3px solid var(--warn); background:#fffaf1; padding:8px 12px; border-radius:0 8px 8px 0; margin-bottom:8px; font-size:14px}
+.flagline.bad{border-color:var(--bad); background:#fdf3f2}
+.flagline.ok{border-color:var(--ok); background:#f0f9f5}
+.dim{border:1px solid var(--line); border-radius:8px; padding:12px; background:#fff}
+.dimscore{font-size:28px; font-weight:750; line-height:1}
+.hl{background:#fff2b8; border-bottom:2px solid #e5c33a; border-radius:2px; padding:0 1px}
+.chk{display:flex; gap:9px; align-items:flex-start; padding:9px 11px; border:1px solid var(--line); border-radius:8px; margin-bottom:8px; cursor:pointer}
+.chk.on{background:#f0f9f5; border-color:#8fcdb4}
+.chk input{margin-top:3px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.diagram{border:1px solid var(--line); border-radius:var(--radius); background:#fff; padding:16px}
+.dtable th,.dtable td{border:1px solid var(--line); padding:6px 9px; font-size:13.5px}
+.dtable{border-collapse:collapse}
+.fp{display:grid; gap:6px; font-size:12.5px}
+.fpcell{border:1px solid #9fb0c8; border-radius:6px; padding:10px 8px; background:#f6f9ff; text-align:center; font-weight:600}
+.fpcell small{display:block; font-weight:400; color:var(--muted)}
+.scroll{overflow-x:auto}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:12.5px;background:#fff}
+ul.clean{margin:0 0 .8em; padding-left:20px}
+ul.clean li{margin-bottom:4px}
+.bullets{background:var(--soft); border-radius:8px; padding:12px 14px 12px 30px; margin:0 0 12px}
+.bullets li{margin-bottom:5px; font-weight:550}
+.wc{font-variant-numeric:tabular-nums; font-weight:650}
+.wc.bad{color:var(--bad)} .wc.ok{color:var(--ok)}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">CELPIP<span>·</span>Trainer</div>
+  <div class="nav" id="nav"></div>
+  <div class="spacer"></div>
+  <div class="tiny muted" id="keystate"></div>
+</div>
+<div id="app"></div>
+<div id="modalroot"></div>
+<script>
+"use strict";
