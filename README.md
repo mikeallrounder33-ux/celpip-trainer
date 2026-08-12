@@ -166,4 +166,4 @@ malformed items at runtime.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Trademark, originality and scoring disclaimers are in [NOTICE.md](NOTICE.md).
