@@ -503,14 +503,55 @@ async function rateResponse(kind, item, text, timeUsedPct, respSeconds) {
 
   if (API.available()) {
     try {
-      const user = kind === 'writing' ? raterUserWriting(item, text, analysis) : raterUserSpeaking(item, text, analysis);
+      let user = kind === 'writing' ? raterUserWriting(item, text, analysis) : raterUserSpeaking(item, text, analysis);
       const s = DB.settings();
-      const out = await API.call(RATER_SYSTEM, user, Math.max(1000, s.maxTokens || 1000));
+      // An in-browser model cannot hold a full rating AND a rewrite in one reply
+      // without truncating. Ask for the scores only, then fetch the rewrite
+      // separately — two short replies parse where one long one does not.
+      const compact = s.provider === 'browser';
+      if (compact) {
+        user = user.replace(/,"rewritten_sample":"\.\.\."/, '')
+          .replace('Output this JSON exactly:', 'Keep every "evidence" under 20 words and every "fix" under 25 words. Output this JSON exactly:');
+      }
+      // A full four-dimension rating with evidence, fixes and a rewrite does not
+      // fit in 1000 tokens; truncating it produces no rating at all.
+      const out = await API.call(RATER_SYSTEM, user, Math.max(2000, s.maxTokens || 1000));
       const r = API.parseJSON(out);
       if (r && r.dimensions) {
         const rdKey = kind === 'writing' ? 'readability' : 'listenability';
-        const nums = ['content_coherence', 'vocabulary', rdKey, 'task_fulfillment']
-          .map(k => r.dimensions[k] && Number(r.dimensions[k].clb)).filter(n => !isNaN(n));
+        const keys = ['content_coherence', 'vocabulary', rdKey, 'task_fulfillment'];
+
+        // Small models routinely omit a dimension or return 0. Left alone that
+        // drags the lowest-anchored overall to nonsense, so any missing or
+        // out-of-range dimension is refilled from the local heuristic rater.
+        const fallback = heuristicRate(kind, item, text, analysis);
+        const patched = [];
+        keys.forEach(k => {
+          const d = r.dimensions[k];
+          const n = d ? Number(d.clb) : NaN;
+          if (!d || !isFinite(n) || n < 3 || n > 12) {
+            r.dimensions[k] = fallback.dimensions[k];
+            patched.push(k);
+          } else { d.clb = Math.round(n); }
+        });
+        if (!r.top_3_fixes || !r.top_3_fixes.length) r.top_3_fixes = fallback.top_3_fixes;
+        if (patched.length) r._patched = patched;
+
+        if (compact && !r.rewritten_sample) {
+          try {
+            const rw = await API.call(
+              'You rewrite English test responses. You output only the rewritten text — no preamble, no explanation, no quotation marks.',
+              'Rewrite the response below one CLB band higher. Keep the same ideas and the same length. Fix the grammar, ' +
+              'replace memorised phrases with natural wording, and vary the sentence lengths.\n\n' + text,
+              900);
+            r.rewritten_sample = String(rw).trim();
+          } catch (e) {
+            r.rewritten_sample = '(The in-browser model could not produce a rewrite. A larger model, or a key-based provider, will.)';
+          }
+        }
+        if (!r.rewritten_sample) r.rewritten_sample = fallback.rewritten_sample;
+
+        const nums = keys.map(k => Number(r.dimensions[k].clb)).filter(n => !isNaN(n));
         // Enforce the lowest-anchored blend locally; never trust a generous overall.
         const computed = anchoredOverall(nums);
         r.overall_clb = Math.min(Number(r.overall_clb) || computed, computed);
@@ -520,7 +561,8 @@ async function rateResponse(kind, item, text, timeUsedPct, respSeconds) {
           if (!r.errors.some(e => String(e.mine || '').toLowerCase() === le.mine.toLowerCase())) r.errors.push(le);
         });
         r.bullets_covered = r.bullets_covered || analysis.bulletsCovered;
-        return { rating: r, analysis, source: 'api' };
+        // If every dimension had to be refilled, this was not really a model rating.
+        return { rating: r, analysis, source: patched.length === keys.length ? 'offline' : 'api' };
       }
     } catch (e) {
       console.warn('rating failed, using offline heuristic:', e.message);

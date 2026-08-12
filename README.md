@@ -70,6 +70,27 @@ practice environment.
 Adding a model gets you unlimited *fresh* items and full rubric feedback with a model
 rewrite. You do not need to pay for that:
 
+### In-browser model — no key, no account, no install ★
+
+**Settings → Provider → "In-browser model" → Download and load model.**
+
+That is the whole setup. An open-weights model downloads once from a CDN and runs on
+your GPU through WebGPU. No key, no account, no billing, and nothing you write leaves
+the machine. After the first download the browser caches the weights, so it works
+offline afterwards.
+
+| Model | Size | Good for |
+|---|---|---|
+| Qwen 2.5 1.5B | ~1.0 GB | fastest; often too weak for the rating schema |
+| Llama 3.2 3B | ~1.9 GB | balanced |
+| **Qwen 2.5 3B** | ~2.0 GB | **recommended** — returns all four dimensions reliably |
+| Qwen 2.5 7B | ~4.7 GB | best quality, needs a strong GPU |
+
+Measured on an Apple M-series Mac with Qwen 2.5 3B: a full four-dimension rating with
+evidence quotes plus a rewritten sample took **21 seconds**. Requires Chrome, Edge, or
+Safari 18+ (WebGPU). Item *generation* still often falls back to the built-in bank at
+this size — the strict passage schemas are hard for a 3B model — but *marking* works.
+
 ### Ollama — free, private, no key
 
 ```bash
@@ -88,10 +109,19 @@ model is markedly more reliable if you have the RAM.
 
 | Preset | Cost | Key |
 |---|---|---|
+| **In-browser model** | **free, local** | **none** |
 | Ollama / LM Studio | free, local | none |
 | Groq | free tier | free signup, no card |
 | OpenRouter (`:free` models) | free | free signup |
 | OpenAI / Anthropic | paid | requires credit |
+
+### Keeping a key off the browser entirely
+
+If you do use a paid provider, you do not have to put the key in the browser. Deploy
+[`worker/celpip-proxy.js`](worker/celpip-proxy.js) as a free Cloudflare Worker, store the
+key as a Worker secret, then in Settings choose OpenAI-compatible, set Base URL to your
+worker, and tick **"This endpoint needs no key from the browser"**. The key stays
+server-side and never reaches the page.
 
 The rater prompt is tuned against Claude. Other models follow it but tend to mark about
 a band more generously — read their per-dimension numbers as slightly optimistic.

@@ -39,11 +39,15 @@ function renderNav() {
     });
   }
   const ks = $('#keystate');
+  const st = DB.settings();
   ks.innerHTML = !API.available()
-    ? '<span class="tag warn">Offline mode — built-in item bank</span>'
-    : API.isLocal()
-      ? '<span class="tag ok">Local model (' + esc(DB.settings().model || '?') + ') — no key, nothing leaves this machine</span>'
-      : '<span class="tag ok">' + esc(API.providerName()) + ' key set — fresh items + full rating</span>';
+    ? '<span class="tag warn">Offline mode — built-in item bank' +
+      (st.provider === 'browser' && BrowserLLM.supported() && !BrowserLLM.ready ? ' · load the in-browser model in Settings' : '') + '</span>'
+    : st.provider === 'browser'
+      ? '<span class="tag ok">In-browser model (' + esc(BrowserLLM.modelId || '?').replace(/-q4f16.*$/, '') + ') — no key, runs on this machine</span>'
+      : API.isLocal() || st.noKeyNeeded
+        ? '<span class="tag ok">' + esc(st.model || '?') + ' — no key in this browser</span>'
+        : '<span class="tag ok">' + esc(API.providerName()) + ' key set — fresh items + full rating</span>';
 }
 
 function go(route, params) {
@@ -610,10 +614,84 @@ function renderSettings() {
 
   c.appendChild(el('label', { class: 'fl', text: 'Provider' }));
   const prov = el('select');
-  [['anthropic', 'Anthropic (Claude)'], ['openai', 'OpenAI-compatible (OpenAI, OpenRouter, Groq, local)']]
+  [['browser', 'In-browser model — no key, no account, no cost'],
+   ['anthropic', 'Anthropic (Claude) — key required'],
+   ['openai', 'OpenAI-compatible (OpenAI, Groq, OpenRouter, local, your proxy)']]
     .forEach(([v, l]) => prov.appendChild(el('option', { value: v, text: l })));
   prov.value = s.provider || 'anthropic';
   c.appendChild(prov);
+
+  /* ---- in-browser model panel ---- */
+  const bWrap = el('div', { style: 'margin-top:14px' });
+  if (!BrowserLLM.supported()) {
+    bWrap.appendChild(el('div', {
+      class: 'flagline bad',
+      html: 'This browser has no <strong>WebGPU</strong>, which the in-browser model needs. ' +
+        'Use Chrome or Edge (or Safari 18+). Everything else in the app still works.'
+    }));
+  } else {
+    bWrap.appendChild(el('div', {
+      class: 'flagline ok',
+      html: 'The model runs <strong>on this machine\'s GPU</strong>. No key, no account, no billing, and nothing you write is sent anywhere. ' +
+        'The weights download once (over the internet), then the browser caches them — after that it works offline too.'
+    }));
+    bWrap.appendChild(el('label', { class: 'fl', text: 'Model' }));
+    const bSel = el('select');
+    BrowserLLM.MODELS.forEach(m => bSel.appendChild(el('option', { value: m.id, text: m.label + '  ·  ' + m.size })));
+    bSel.value = s.browserModel || BrowserLLM.MODELS[1].id;
+    bWrap.appendChild(bSel);
+
+    const status = el('div', { class: 'small', style: 'margin-top:10px' });
+    const prog = el('div', { class: 'bar', style: 'margin-top:8px;display:none' });
+    prog.innerHTML = '<i style="width:0%"></i>';
+    const loadBtn = el('button', { class: 'btn', style: 'margin-top:10px' });
+
+    const paintStatus = () => {
+      if (BrowserLLM.ready) {
+        status.innerHTML = '<span class="tag ok">Loaded</span> ' + esc(BrowserLLM.modelId) + ' — ready to generate and mark.';
+        loadBtn.textContent = 'Load a different model';
+      } else if (BrowserLLM.loading) {
+        status.innerHTML = '<span class="tag warn">Loading…</span>';
+        loadBtn.textContent = 'Loading…';
+      } else {
+        status.innerHTML = '<span class="tag grey">Not loaded</span> — the app uses the built-in bank until you load a model.' +
+          (BrowserLLM.lastError ? ' <span style="color:var(--bad)">Last error: ' + esc(BrowserLLM.lastError) + '</span>' : '');
+        loadBtn.textContent = 'Download and load model';
+      }
+      loadBtn.disabled = BrowserLLM.loading;
+    };
+    loadBtn.onclick = async () => {
+      const id = bSel.value;
+      DB.saveSettings(Object.assign(DB.settings(), { provider: 'browser', browserModel: id }));
+      prog.style.display = '';
+      paintStatus();
+      try {
+        await BrowserLLM.load(id, (p, text) => {
+          prog.querySelector('i').style.width = Math.round((p || 0) * 100) + '%';
+          status.innerHTML = '<span class="tag warn">Loading…</span> <span class="tiny muted">' + esc(String(text).slice(0, 120)) + '</span>';
+        });
+        prog.querySelector('i').style.width = '100%';
+        toast('Model loaded. Item generation and rating are now on, with no key.', 'ok');
+      } catch (e) {
+        toast('Could not load the model: ' + e.message, 'bad');
+      }
+      prog.style.display = 'none';
+      paintStatus();
+      renderNav();
+    };
+    bWrap.appendChild(status);
+    bWrap.appendChild(prog);
+    bWrap.appendChild(loadBtn);
+    bWrap.appendChild(el('p', {
+      class: 'tiny muted', style: 'margin-top:8px',
+      html: 'First load downloads the weights and takes a few minutes on a normal connection. ' +
+        'A small model is reliable at <strong>marking</strong> your writing and speaking, but often fails the strict format needed to ' +
+        '<strong>generate</strong> a full Reading passage — when that happens the app quietly uses its built-in bank instead and tells you why. ' +
+        'The 7B model is much better at generation if your machine can carry it.'
+    }));
+    paintStatus();
+  }
+  c.appendChild(bWrap);
 
   c.appendChild(el('label', { class: 'fl', style: 'margin-top:14px', text: 'API key' }));
   const key = el('input', { type: 'password', value: s.apiKey, placeholder: 'sk-…' });
@@ -681,9 +759,29 @@ function renderSettings() {
   }));
   c.appendChild(baseWrap);
 
+  /* Endpoints that hold the key server-side (your own proxy) need no key here. */
+  const nkWrap = el('div');
+  const nk = el('label', { class: 'chk' + (s.noKeyNeeded ? ' on' : '') });
+  const nki = el('input', { type: 'checkbox' }); nki.checked = !!s.noKeyNeeded;
+  nki.onchange = () => nk.classList.toggle('on', nki.checked);
+  nk.appendChild(nki);
+  nk.appendChild(el('span', { text: 'This endpoint needs no key from the browser (a local server, or your own proxy that keeps the key server-side)' }));
+  nkWrap.appendChild(nk);
+  c.appendChild(nkWrap);
+
   const syncProvider = () => {
+    const isBrowser = prov.value === 'browser';
     const isOA = prov.value === 'openai';
+    bWrap.style.display = isBrowser ? '' : 'none';
+    nkWrap.style.display = isOA ? '' : 'none';
+    key.parentElement === c && (key.previousElementSibling.style.display = isBrowser ? 'none' : '');
+    key.style.display = isBrowser ? 'none' : '';
+    keyNote.style.display = isBrowser ? 'none' : '';
+    model.style.display = isBrowser ? 'none' : '';
+    modelNote.style.display = isBrowser ? 'none' : '';
+    if (model.previousElementSibling) model.previousElementSibling.style.display = isBrowser ? 'none' : '';
     baseWrap.style.display = isOA ? '' : 'none';
+    if (isBrowser) return;
     key.placeholder = isOA ? 'sk-…' : 'sk-ant-…';
     keyNote.innerHTML = 'Stored in this browser\'s localStorage under <code>celpip_settings</code> and sent only to ' +
       (isOA ? 'the base URL below' : '<code>api.anthropic.com</code>') + '. ' +
@@ -717,21 +815,27 @@ function renderSettings() {
 
   const save = el('button', { class: 'btn', style: 'margin-top:14px', text: 'Save settings' });
   save.onclick = () => {
-    DB.saveSettings({
+    DB.saveSettings(Object.assign(DB.settings(), {
       apiKey: key.value.trim(), provider: prov.value,
       model: model.value.trim() || (prov.value === 'openai' ? 'gpt-4o' : 'claude-sonnet-4-6'),
       baseUrl: baseUrl.value.trim() || 'https://api.openai.com/v1',
+      noKeyNeeded: nki.checked,
       maxTokens: Math.max(400, Math.min(8000, parseInt(mt.value, 10) || 1000)),
       useApi: ua.checked, persistAudio: pai.checked
-    });
+    }));
     renderNav();
     toast('Settings saved.', 'ok');
   };
   c.appendChild(save);
 
-  const test = el('button', { class: 'btn ghost', style: 'margin-top:14px;margin-left:8px', text: 'Test the key' });
+  const test = el('button', { class: 'btn ghost', style: 'margin-top:14px;margin-left:8px', text: 'Test the connection' });
   test.onclick = async () => {
-    if (!key.value.trim()) return toast('Enter a key first.', 'bad');
+    if (prov.value === 'browser') {
+      if (!BrowserLLM.ready) return toast('Load the in-browser model first.', 'bad');
+      try { const o = await API.call('Reply with the single word OK.', 'Say OK.', 16); return toast('Working. Model replied: ' + o.trim().slice(0, 40), 'ok'); }
+      catch (e) { return toast('Failed: ' + e.message, 'bad'); }
+    }
+    if (!key.value.trim() && !nki.checked && !/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(baseUrl.value)) return toast('Enter a key first.', 'bad');
     DB.saveSettings(Object.assign(DB.settings(), {
       apiKey: key.value.trim(), provider: prov.value,
       model: model.value.trim() || (prov.value === 'openai' ? 'gpt-4o' : 'claude-sonnet-4-6'),
@@ -877,16 +981,30 @@ function renderSettings() {
       'Denied. Click the padlock/camera icon in the address bar and allow the microphone, then reload.');
 
     // API
-    const label = API.providerName() + ' API (' + (DB.settings().model || '?') + ')';
-    if (API.isLocal()) {
+    add('WebGPU (needed for the in-browser model)', BrowserLLM.supported(), BrowserLLM.supported() ? 'available' : 'missing',
+      'Only Chrome, Edge and Safari 18+ expose WebGPU. Without it, use a key-based provider or stay on the offline bank.');
+
+    const label = API.providerName() + ' (' + (DB.settings().provider === 'browser' ? (BrowserLLM.modelId || 'none loaded') : (DB.settings().model || '?')) + ')';
+    if (DB.settings().provider === 'browser') {
+      if (!BrowserLLM.ready) {
+        add(label, false, 'model not loaded',
+          'Go to Settings → Provider → In-browser model → "Download and load model". It is a one-time download.');
+      } else {
+        try {
+          const t0 = Date.now();
+          await API.call('Reply with the single word OK.', 'Say OK.', 16);
+          add(label, true, 'generating locally, ' + (Date.now() - t0) + ' ms', '');
+        } catch (e) { add(label, false, e.message, 'Reload the page and load the model again.'); }
+      }
+    } else if (API.isLocal() || DB.settings().noKeyNeeded) {
       try {
         const t0 = Date.now();
         await API.call('Reply with the single word OK.', 'Say OK.', 16);
-        add(label + ' — local, no key', true, 'reachable, ' + (Date.now() - t0) + ' ms', '');
+        add(label + ' — no key in browser', true, 'reachable, ' + (Date.now() - t0) + ' ms', '');
       } catch (e) {
-        add(label + ' — local, no key', false, e.message,
-          'Is the local server running? If it is, this is almost always CORS. Ollama: run ' +
-          'launchctl setenv OLLAMA_ORIGINS "*" and restart it. LM Studio: turn on "Enable CORS" in the server tab.');
+        add(label + ' — no key in browser', false, e.message,
+          'Is the server running and reachable? If it is, this is almost always CORS. Ollama: run ' +
+          'launchctl setenv OLLAMA_ORIGINS "*" and restart it. LM Studio: turn on "Enable CORS". A proxy must return Access-Control-Allow-Origin.');
       }
     } else if (!DB.settings().apiKey.trim()) {
       add(label, false, 'no key saved in this profile',

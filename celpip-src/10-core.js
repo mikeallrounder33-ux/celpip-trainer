@@ -141,7 +141,51 @@ function bindClock(node, timer) {
   };
 }
 
-/* ---------- 10.6 Anthropic Messages API ---------- */
+/* ---------- 10.6a In-browser model (WebLLM + WebGPU) ----------
+   Runs an open-weights model on this machine's GPU. No key, no account,
+   no server, no cost. Weights download once from a CDN and are then cached
+   by the browser, so later sessions work offline too. */
+const BrowserLLM = {
+  engine: null, ready: false, loading: false, modelId: null, lastError: null,
+  MODELS: [
+    { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 1.5B — fastest', size: '~1.0 GB' },
+    { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B — balanced', size: '~1.9 GB' },
+    { id: 'Qwen2.5-3B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 3B — best JSON at this size', size: '~2.0 GB' },
+    { id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 7B — best quality, needs a strong GPU', size: '~4.7 GB' }
+  ],
+  supported() { return !!navigator.gpu; },
+  async load(modelId, onProgress) {
+    if (this.loading) throw new Error('A model is already loading.');
+    if (!this.supported()) throw new Error('This browser has no WebGPU. Use Chrome or Edge (Safari 18+ also works).');
+    this.loading = true; this.ready = false; this.lastError = null;
+    try {
+      const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+      this.engine = await webllm.CreateMLCEngine(modelId, {
+        initProgressCallback: r => onProgress && onProgress(r.progress || 0, r.text || '')
+      });
+      this.modelId = modelId; this.ready = true;
+      return true;
+    } catch (e) {
+      this.lastError = e.message; throw e;
+    } finally { this.loading = false; }
+  },
+  async chat(system, user, maxTokens, wantJson) {
+    if (!this.ready) throw new Error('The in-browser model is not loaded yet — load it in Settings.');
+    // NOTE: WebLLM's response_format:{type:'json_object'} throws a BindingError
+    // in the current build, so JSON is requested in the prompt instead and
+    // recovered by API.parseJSON, which tolerates prose and code fences.
+    const r = await this.engine.chat.completions.create({
+      messages: [
+        { role: 'system', content: system + (wantJson ? '\nRespond with the JSON object only. Begin your reply with { and end it with }. No prose before or after.' : '') },
+        { role: 'user', content: user }
+      ],
+      max_tokens: maxTokens || 1000, temperature: 0.6
+    });
+    return (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content) || '';
+  }
+};
+
+/* ---------- 10.6 model providers ---------- */
 const API = {
   key() { return DB.settings().apiKey.trim(); },
   /* A local server (Ollama, LM Studio, llama.cpp) needs no key at all. */
@@ -152,12 +196,20 @@ const API = {
   available() {
     const s = DB.settings();
     if (s.useApi === false) return false;
-    return !!s.apiKey.trim() || this.isLocal(s);
+    if (s.provider === 'browser') return BrowserLLM.ready;
+    // A key, a local server, or your own proxy that holds the key server-side.
+    return !!s.apiKey.trim() || this.isLocal(s) || !!s.noKeyNeeded;
   },
-  providerName() { return DB.settings().provider === 'openai' ? 'OpenAI-compatible' : 'Anthropic'; },
+  providerName() {
+    const p = DB.settings().provider;
+    return p === 'browser' ? 'In-browser model' : p === 'openai' ? 'OpenAI-compatible' : 'Anthropic';
+  },
+
+  wantsJSON(system, user) { return /output\s+(this\s+)?json|json only/i.test(system + ' ' + user); },
 
   async call(system, user, maxTokens) {
     const s = DB.settings();
+    if (s.provider === 'browser') return BrowserLLM.chat(system, user, maxTokens, this.wantsJSON(system, user));
     return s.provider === 'openai'
       ? this.callOpenAI(s, system, user, maxTokens, {})
       : this.callAnthropic(s, system, user, maxTokens);
@@ -242,7 +294,30 @@ const API = {
       else if (c === '{') depth++;
       else if (c === '}') { depth--; if (depth === 0) return JSON.parse(t.slice(start, i + 1)); }
     }
-    throw new Error('unbalanced JSON in response');
+    // Ran out of text: the reply was truncated mid-object, which is the usual
+    // failure with small local models. Close what is still open and reparse.
+    return this.repairJSON(t.slice(start));
+  },
+
+  repairJSON(frag) {
+    let inStr = false, escd = false;
+    const stack = [];
+    for (let i = 0; i < frag.length; i++) {
+      const c = frag[i];
+      if (inStr) {
+        if (escd) escd = false;
+        else if (c === '\\') escd = true;
+        else if (c === '"') inStr = false;
+      } else if (c === '"') inStr = true;
+      else if (c === '{' || c === '[') stack.push(c === '{' ? '}' : ']');
+      else if (c === '}' || c === ']') stack.pop();
+    }
+    let out = frag;
+    if (inStr) out += '"';                       // close a dangling string
+    out = out.replace(/,\s*$/, '');              // drop a trailing comma
+    while (stack.length) out += stack.pop();     // close open objects/arrays
+    try { return JSON.parse(out); }
+    catch (e) { throw new Error('unbalanced JSON in response (reply was truncated — raise max_tokens)'); }
   }
 };
 

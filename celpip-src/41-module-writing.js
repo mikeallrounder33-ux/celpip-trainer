@@ -224,7 +224,7 @@ const Writing = {
     const attempt = {
       id: uid(), ts: Date.now(), module: 'writing', mode: s.cfg.mode, task: item.task,
       item, response: s.text, wordCount: words(s.text),
-      rating: res.rating, ratingSource: res.source, analysis: {
+      rating: res.rating, ratingSource: res.source, ratingProvider: API.providerName() + " · " + (DB.settings().provider === "browser" ? (BrowserLLM.modelId || "") : DB.settings().model), analysis: {
         templates: tp, register: reg, bulletsCovered: res.rating.bullets_covered || res.analysis.bulletsCovered
       },
       clbNum: res.rating.overall_clb, clb: 'CLB ' + res.rating.overall_clb,
@@ -281,7 +281,11 @@ function showProductiveResult(a) {
     '</div>' +
     '<p class="tiny muted" style="margin-top:12px">Overall is the <strong>lowest-anchored blend</strong> of the four dimensions, not their average — ' +
     'it is pulled toward your weakest dimension deliberately, because that is how CELPIP behaves. ' +
-    'Marked by: ' + (a.ratingSource === 'api' ? 'Anthropic API rater' : 'offline heuristic rater (add an API key for full feedback)') + '.</p>' +
+    'Marked by: ' + (a.ratingSource === 'api' ? esc(a.ratingProvider || 'model rater') : 'offline heuristic rater (connect a model for full feedback)') + '.</p>' +
+    (r._patched && r._patched.length
+      ? '<div class="flagline">The model returned no usable score for <strong>' + esc(r._patched.join(', ')) +
+        '</strong>, so those came from the built-in heuristic rater. Small in-browser models do this often; a larger model returns all four reliably.</div>'
+      : '') +
     (a.timedOut ? '<div class="flagline bad">Time expired before you submitted.</div>' : '');
   wrap.appendChild(head);
 

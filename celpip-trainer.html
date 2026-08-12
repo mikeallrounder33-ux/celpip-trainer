@@ -311,7 +311,51 @@ function bindClock(node, timer) {
   };
 }
 
-/* ---------- 10.6 Anthropic Messages API ---------- */
+/* ---------- 10.6a In-browser model (WebLLM + WebGPU) ----------
+   Runs an open-weights model on this machine's GPU. No key, no account,
+   no server, no cost. Weights download once from a CDN and are then cached
+   by the browser, so later sessions work offline too. */
+const BrowserLLM = {
+  engine: null, ready: false, loading: false, modelId: null, lastError: null,
+  MODELS: [
+    { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 1.5B — fastest', size: '~1.0 GB' },
+    { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B — balanced', size: '~1.9 GB' },
+    { id: 'Qwen2.5-3B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 3B — best JSON at this size', size: '~2.0 GB' },
+    { id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 7B — best quality, needs a strong GPU', size: '~4.7 GB' }
+  ],
+  supported() { return !!navigator.gpu; },
+  async load(modelId, onProgress) {
+    if (this.loading) throw new Error('A model is already loading.');
+    if (!this.supported()) throw new Error('This browser has no WebGPU. Use Chrome or Edge (Safari 18+ also works).');
+    this.loading = true; this.ready = false; this.lastError = null;
+    try {
+      const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+      this.engine = await webllm.CreateMLCEngine(modelId, {
+        initProgressCallback: r => onProgress && onProgress(r.progress || 0, r.text || '')
+      });
+      this.modelId = modelId; this.ready = true;
+      return true;
+    } catch (e) {
+      this.lastError = e.message; throw e;
+    } finally { this.loading = false; }
+  },
+  async chat(system, user, maxTokens, wantJson) {
+    if (!this.ready) throw new Error('The in-browser model is not loaded yet — load it in Settings.');
+    // NOTE: WebLLM's response_format:{type:'json_object'} throws a BindingError
+    // in the current build, so JSON is requested in the prompt instead and
+    // recovered by API.parseJSON, which tolerates prose and code fences.
+    const r = await this.engine.chat.completions.create({
+      messages: [
+        { role: 'system', content: system + (wantJson ? '\nRespond with the JSON object only. Begin your reply with { and end it with }. No prose before or after.' : '') },
+        { role: 'user', content: user }
+      ],
+      max_tokens: maxTokens || 1000, temperature: 0.6
+    });
+    return (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content) || '';
+  }
+};
+
+/* ---------- 10.6 model providers ---------- */
 const API = {
   key() { return DB.settings().apiKey.trim(); },
   /* A local server (Ollama, LM Studio, llama.cpp) needs no key at all. */
@@ -322,12 +366,20 @@ const API = {
   available() {
     const s = DB.settings();
     if (s.useApi === false) return false;
-    return !!s.apiKey.trim() || this.isLocal(s);
+    if (s.provider === 'browser') return BrowserLLM.ready;
+    // A key, a local server, or your own proxy that holds the key server-side.
+    return !!s.apiKey.trim() || this.isLocal(s) || !!s.noKeyNeeded;
   },
-  providerName() { return DB.settings().provider === 'openai' ? 'OpenAI-compatible' : 'Anthropic'; },
+  providerName() {
+    const p = DB.settings().provider;
+    return p === 'browser' ? 'In-browser model' : p === 'openai' ? 'OpenAI-compatible' : 'Anthropic';
+  },
+
+  wantsJSON(system, user) { return /output\s+(this\s+)?json|json only/i.test(system + ' ' + user); },
 
   async call(system, user, maxTokens) {
     const s = DB.settings();
+    if (s.provider === 'browser') return BrowserLLM.chat(system, user, maxTokens, this.wantsJSON(system, user));
     return s.provider === 'openai'
       ? this.callOpenAI(s, system, user, maxTokens, {})
       : this.callAnthropic(s, system, user, maxTokens);
@@ -412,7 +464,30 @@ const API = {
       else if (c === '{') depth++;
       else if (c === '}') { depth--; if (depth === 0) return JSON.parse(t.slice(start, i + 1)); }
     }
-    throw new Error('unbalanced JSON in response');
+    // Ran out of text: the reply was truncated mid-object, which is the usual
+    // failure with small local models. Close what is still open and reparse.
+    return this.repairJSON(t.slice(start));
+  },
+
+  repairJSON(frag) {
+    let inStr = false, escd = false;
+    const stack = [];
+    for (let i = 0; i < frag.length; i++) {
+      const c = frag[i];
+      if (inStr) {
+        if (escd) escd = false;
+        else if (c === '\\') escd = true;
+        else if (c === '"') inStr = false;
+      } else if (c === '"') inStr = true;
+      else if (c === '{' || c === '[') stack.push(c === '{' ? '}' : ']');
+      else if (c === '}' || c === ']') stack.pop();
+    }
+    let out = frag;
+    if (inStr) out += '"';                       // close a dangling string
+    out = out.replace(/,\s*$/, '');              // drop a trailing comma
+    while (stack.length) out += stack.pop();     // close open objects/arrays
+    try { return JSON.parse(out); }
+    catch (e) { throw new Error('unbalanced JSON in response (reply was truncated — raise max_tokens)'); }
   }
 };
 
@@ -3218,14 +3293,55 @@ async function rateResponse(kind, item, text, timeUsedPct, respSeconds) {
 
   if (API.available()) {
     try {
-      const user = kind === 'writing' ? raterUserWriting(item, text, analysis) : raterUserSpeaking(item, text, analysis);
+      let user = kind === 'writing' ? raterUserWriting(item, text, analysis) : raterUserSpeaking(item, text, analysis);
       const s = DB.settings();
-      const out = await API.call(RATER_SYSTEM, user, Math.max(1000, s.maxTokens || 1000));
+      // An in-browser model cannot hold a full rating AND a rewrite in one reply
+      // without truncating. Ask for the scores only, then fetch the rewrite
+      // separately — two short replies parse where one long one does not.
+      const compact = s.provider === 'browser';
+      if (compact) {
+        user = user.replace(/,"rewritten_sample":"\.\.\."/, '')
+          .replace('Output this JSON exactly:', 'Keep every "evidence" under 20 words and every "fix" under 25 words. Output this JSON exactly:');
+      }
+      // A full four-dimension rating with evidence, fixes and a rewrite does not
+      // fit in 1000 tokens; truncating it produces no rating at all.
+      const out = await API.call(RATER_SYSTEM, user, Math.max(2000, s.maxTokens || 1000));
       const r = API.parseJSON(out);
       if (r && r.dimensions) {
         const rdKey = kind === 'writing' ? 'readability' : 'listenability';
-        const nums = ['content_coherence', 'vocabulary', rdKey, 'task_fulfillment']
-          .map(k => r.dimensions[k] && Number(r.dimensions[k].clb)).filter(n => !isNaN(n));
+        const keys = ['content_coherence', 'vocabulary', rdKey, 'task_fulfillment'];
+
+        // Small models routinely omit a dimension or return 0. Left alone that
+        // drags the lowest-anchored overall to nonsense, so any missing or
+        // out-of-range dimension is refilled from the local heuristic rater.
+        const fallback = heuristicRate(kind, item, text, analysis);
+        const patched = [];
+        keys.forEach(k => {
+          const d = r.dimensions[k];
+          const n = d ? Number(d.clb) : NaN;
+          if (!d || !isFinite(n) || n < 3 || n > 12) {
+            r.dimensions[k] = fallback.dimensions[k];
+            patched.push(k);
+          } else { d.clb = Math.round(n); }
+        });
+        if (!r.top_3_fixes || !r.top_3_fixes.length) r.top_3_fixes = fallback.top_3_fixes;
+        if (patched.length) r._patched = patched;
+
+        if (compact && !r.rewritten_sample) {
+          try {
+            const rw = await API.call(
+              'You rewrite English test responses. You output only the rewritten text — no preamble, no explanation, no quotation marks.',
+              'Rewrite the response below one CLB band higher. Keep the same ideas and the same length. Fix the grammar, ' +
+              'replace memorised phrases with natural wording, and vary the sentence lengths.\n\n' + text,
+              900);
+            r.rewritten_sample = String(rw).trim();
+          } catch (e) {
+            r.rewritten_sample = '(The in-browser model could not produce a rewrite. A larger model, or a key-based provider, will.)';
+          }
+        }
+        if (!r.rewritten_sample) r.rewritten_sample = fallback.rewritten_sample;
+
+        const nums = keys.map(k => Number(r.dimensions[k].clb)).filter(n => !isNaN(n));
         // Enforce the lowest-anchored blend locally; never trust a generous overall.
         const computed = anchoredOverall(nums);
         r.overall_clb = Math.min(Number(r.overall_clb) || computed, computed);
@@ -3235,7 +3351,8 @@ async function rateResponse(kind, item, text, timeUsedPct, respSeconds) {
           if (!r.errors.some(e => String(e.mine || '').toLowerCase() === le.mine.toLowerCase())) r.errors.push(le);
         });
         r.bullets_covered = r.bullets_covered || analysis.bulletsCovered;
-        return { rating: r, analysis, source: 'api' };
+        // If every dimension had to be refilled, this was not really a model rating.
+        return { rating: r, analysis, source: patched.length === keys.length ? 'offline' : 'api' };
       }
     } catch (e) {
       console.warn('rating failed, using offline heuristic:', e.message);
@@ -3992,7 +4109,7 @@ const Writing = {
     const attempt = {
       id: uid(), ts: Date.now(), module: 'writing', mode: s.cfg.mode, task: item.task,
       item, response: s.text, wordCount: words(s.text),
-      rating: res.rating, ratingSource: res.source, analysis: {
+      rating: res.rating, ratingSource: res.source, ratingProvider: API.providerName() + " · " + (DB.settings().provider === "browser" ? (BrowserLLM.modelId || "") : DB.settings().model), analysis: {
         templates: tp, register: reg, bulletsCovered: res.rating.bullets_covered || res.analysis.bulletsCovered
       },
       clbNum: res.rating.overall_clb, clb: 'CLB ' + res.rating.overall_clb,
@@ -4049,7 +4166,11 @@ function showProductiveResult(a) {
     '</div>' +
     '<p class="tiny muted" style="margin-top:12px">Overall is the <strong>lowest-anchored blend</strong> of the four dimensions, not their average — ' +
     'it is pulled toward your weakest dimension deliberately, because that is how CELPIP behaves. ' +
-    'Marked by: ' + (a.ratingSource === 'api' ? 'Anthropic API rater' : 'offline heuristic rater (add an API key for full feedback)') + '.</p>' +
+    'Marked by: ' + (a.ratingSource === 'api' ? esc(a.ratingProvider || 'model rater') : 'offline heuristic rater (connect a model for full feedback)') + '.</p>' +
+    (r._patched && r._patched.length
+      ? '<div class="flagline">The model returned no usable score for <strong>' + esc(r._patched.join(', ')) +
+        '</strong>, so those came from the built-in heuristic rater. Small in-browser models do this often; a larger model returns all four reliably.</div>'
+      : '') +
     (a.timedOut ? '<div class="flagline bad">Time expired before you submitted.</div>' : '');
   wrap.appendChild(head);
 
@@ -4431,7 +4552,7 @@ const Speaking = {
       const attempt = {
         id, ts: Date.now(), module: 'speaking', mode: s.cfg.mode, task: tk.item.task,
         item: tk.item, response: tk.transcript, wordCount: words(tk.transcript),
-        rating: res.rating, ratingSource: res.source,
+        rating: res.rating, ratingSource: res.source, ratingProvider: API.providerName() + " · " + (DB.settings().provider === "browser" ? (BrowserLLM.modelId || "") : DB.settings().model),
         analysis: { templates: tp, register: { want: 'n/a', flags: [] }, bulletsCovered: [] },
         clbNum: res.rating.overall_clb, clb: 'CLB ' + res.rating.overall_clb,
         timeUsedPct: tk.usedPct, allottedSec: tk.respSec, usedSec: Math.round(tk.respSec * tk.usedPct / 100),
@@ -4537,11 +4658,15 @@ function renderNav() {
     });
   }
   const ks = $('#keystate');
+  const st = DB.settings();
   ks.innerHTML = !API.available()
-    ? '<span class="tag warn">Offline mode — built-in item bank</span>'
-    : API.isLocal()
-      ? '<span class="tag ok">Local model (' + esc(DB.settings().model || '?') + ') — no key, nothing leaves this machine</span>'
-      : '<span class="tag ok">' + esc(API.providerName()) + ' key set — fresh items + full rating</span>';
+    ? '<span class="tag warn">Offline mode — built-in item bank' +
+      (st.provider === 'browser' && BrowserLLM.supported() && !BrowserLLM.ready ? ' · load the in-browser model in Settings' : '') + '</span>'
+    : st.provider === 'browser'
+      ? '<span class="tag ok">In-browser model (' + esc(BrowserLLM.modelId || '?').replace(/-q4f16.*$/, '') + ') — no key, runs on this machine</span>'
+      : API.isLocal() || st.noKeyNeeded
+        ? '<span class="tag ok">' + esc(st.model || '?') + ' — no key in this browser</span>'
+        : '<span class="tag ok">' + esc(API.providerName()) + ' key set — fresh items + full rating</span>';
 }
 
 function go(route, params) {
@@ -5108,10 +5233,84 @@ function renderSettings() {
 
   c.appendChild(el('label', { class: 'fl', text: 'Provider' }));
   const prov = el('select');
-  [['anthropic', 'Anthropic (Claude)'], ['openai', 'OpenAI-compatible (OpenAI, OpenRouter, Groq, local)']]
+  [['browser', 'In-browser model — no key, no account, no cost'],
+   ['anthropic', 'Anthropic (Claude) — key required'],
+   ['openai', 'OpenAI-compatible (OpenAI, Groq, OpenRouter, local, your proxy)']]
     .forEach(([v, l]) => prov.appendChild(el('option', { value: v, text: l })));
   prov.value = s.provider || 'anthropic';
   c.appendChild(prov);
+
+  /* ---- in-browser model panel ---- */
+  const bWrap = el('div', { style: 'margin-top:14px' });
+  if (!BrowserLLM.supported()) {
+    bWrap.appendChild(el('div', {
+      class: 'flagline bad',
+      html: 'This browser has no <strong>WebGPU</strong>, which the in-browser model needs. ' +
+        'Use Chrome or Edge (or Safari 18+). Everything else in the app still works.'
+    }));
+  } else {
+    bWrap.appendChild(el('div', {
+      class: 'flagline ok',
+      html: 'The model runs <strong>on this machine\'s GPU</strong>. No key, no account, no billing, and nothing you write is sent anywhere. ' +
+        'The weights download once (over the internet), then the browser caches them — after that it works offline too.'
+    }));
+    bWrap.appendChild(el('label', { class: 'fl', text: 'Model' }));
+    const bSel = el('select');
+    BrowserLLM.MODELS.forEach(m => bSel.appendChild(el('option', { value: m.id, text: m.label + '  ·  ' + m.size })));
+    bSel.value = s.browserModel || BrowserLLM.MODELS[1].id;
+    bWrap.appendChild(bSel);
+
+    const status = el('div', { class: 'small', style: 'margin-top:10px' });
+    const prog = el('div', { class: 'bar', style: 'margin-top:8px;display:none' });
+    prog.innerHTML = '<i style="width:0%"></i>';
+    const loadBtn = el('button', { class: 'btn', style: 'margin-top:10px' });
+
+    const paintStatus = () => {
+      if (BrowserLLM.ready) {
+        status.innerHTML = '<span class="tag ok">Loaded</span> ' + esc(BrowserLLM.modelId) + ' — ready to generate and mark.';
+        loadBtn.textContent = 'Load a different model';
+      } else if (BrowserLLM.loading) {
+        status.innerHTML = '<span class="tag warn">Loading…</span>';
+        loadBtn.textContent = 'Loading…';
+      } else {
+        status.innerHTML = '<span class="tag grey">Not loaded</span> — the app uses the built-in bank until you load a model.' +
+          (BrowserLLM.lastError ? ' <span style="color:var(--bad)">Last error: ' + esc(BrowserLLM.lastError) + '</span>' : '');
+        loadBtn.textContent = 'Download and load model';
+      }
+      loadBtn.disabled = BrowserLLM.loading;
+    };
+    loadBtn.onclick = async () => {
+      const id = bSel.value;
+      DB.saveSettings(Object.assign(DB.settings(), { provider: 'browser', browserModel: id }));
+      prog.style.display = '';
+      paintStatus();
+      try {
+        await BrowserLLM.load(id, (p, text) => {
+          prog.querySelector('i').style.width = Math.round((p || 0) * 100) + '%';
+          status.innerHTML = '<span class="tag warn">Loading…</span> <span class="tiny muted">' + esc(String(text).slice(0, 120)) + '</span>';
+        });
+        prog.querySelector('i').style.width = '100%';
+        toast('Model loaded. Item generation and rating are now on, with no key.', 'ok');
+      } catch (e) {
+        toast('Could not load the model: ' + e.message, 'bad');
+      }
+      prog.style.display = 'none';
+      paintStatus();
+      renderNav();
+    };
+    bWrap.appendChild(status);
+    bWrap.appendChild(prog);
+    bWrap.appendChild(loadBtn);
+    bWrap.appendChild(el('p', {
+      class: 'tiny muted', style: 'margin-top:8px',
+      html: 'First load downloads the weights and takes a few minutes on a normal connection. ' +
+        'A small model is reliable at <strong>marking</strong> your writing and speaking, but often fails the strict format needed to ' +
+        '<strong>generate</strong> a full Reading passage — when that happens the app quietly uses its built-in bank instead and tells you why. ' +
+        'The 7B model is much better at generation if your machine can carry it.'
+    }));
+    paintStatus();
+  }
+  c.appendChild(bWrap);
 
   c.appendChild(el('label', { class: 'fl', style: 'margin-top:14px', text: 'API key' }));
   const key = el('input', { type: 'password', value: s.apiKey, placeholder: 'sk-…' });
@@ -5179,9 +5378,29 @@ function renderSettings() {
   }));
   c.appendChild(baseWrap);
 
+  /* Endpoints that hold the key server-side (your own proxy) need no key here. */
+  const nkWrap = el('div');
+  const nk = el('label', { class: 'chk' + (s.noKeyNeeded ? ' on' : '') });
+  const nki = el('input', { type: 'checkbox' }); nki.checked = !!s.noKeyNeeded;
+  nki.onchange = () => nk.classList.toggle('on', nki.checked);
+  nk.appendChild(nki);
+  nk.appendChild(el('span', { text: 'This endpoint needs no key from the browser (a local server, or your own proxy that keeps the key server-side)' }));
+  nkWrap.appendChild(nk);
+  c.appendChild(nkWrap);
+
   const syncProvider = () => {
+    const isBrowser = prov.value === 'browser';
     const isOA = prov.value === 'openai';
+    bWrap.style.display = isBrowser ? '' : 'none';
+    nkWrap.style.display = isOA ? '' : 'none';
+    key.parentElement === c && (key.previousElementSibling.style.display = isBrowser ? 'none' : '');
+    key.style.display = isBrowser ? 'none' : '';
+    keyNote.style.display = isBrowser ? 'none' : '';
+    model.style.display = isBrowser ? 'none' : '';
+    modelNote.style.display = isBrowser ? 'none' : '';
+    if (model.previousElementSibling) model.previousElementSibling.style.display = isBrowser ? 'none' : '';
     baseWrap.style.display = isOA ? '' : 'none';
+    if (isBrowser) return;
     key.placeholder = isOA ? 'sk-…' : 'sk-ant-…';
     keyNote.innerHTML = 'Stored in this browser\'s localStorage under <code>celpip_settings</code> and sent only to ' +
       (isOA ? 'the base URL below' : '<code>api.anthropic.com</code>') + '. ' +
@@ -5215,21 +5434,27 @@ function renderSettings() {
 
   const save = el('button', { class: 'btn', style: 'margin-top:14px', text: 'Save settings' });
   save.onclick = () => {
-    DB.saveSettings({
+    DB.saveSettings(Object.assign(DB.settings(), {
       apiKey: key.value.trim(), provider: prov.value,
       model: model.value.trim() || (prov.value === 'openai' ? 'gpt-4o' : 'claude-sonnet-4-6'),
       baseUrl: baseUrl.value.trim() || 'https://api.openai.com/v1',
+      noKeyNeeded: nki.checked,
       maxTokens: Math.max(400, Math.min(8000, parseInt(mt.value, 10) || 1000)),
       useApi: ua.checked, persistAudio: pai.checked
-    });
+    }));
     renderNav();
     toast('Settings saved.', 'ok');
   };
   c.appendChild(save);
 
-  const test = el('button', { class: 'btn ghost', style: 'margin-top:14px;margin-left:8px', text: 'Test the key' });
+  const test = el('button', { class: 'btn ghost', style: 'margin-top:14px;margin-left:8px', text: 'Test the connection' });
   test.onclick = async () => {
-    if (!key.value.trim()) return toast('Enter a key first.', 'bad');
+    if (prov.value === 'browser') {
+      if (!BrowserLLM.ready) return toast('Load the in-browser model first.', 'bad');
+      try { const o = await API.call('Reply with the single word OK.', 'Say OK.', 16); return toast('Working. Model replied: ' + o.trim().slice(0, 40), 'ok'); }
+      catch (e) { return toast('Failed: ' + e.message, 'bad'); }
+    }
+    if (!key.value.trim() && !nki.checked && !/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(baseUrl.value)) return toast('Enter a key first.', 'bad');
     DB.saveSettings(Object.assign(DB.settings(), {
       apiKey: key.value.trim(), provider: prov.value,
       model: model.value.trim() || (prov.value === 'openai' ? 'gpt-4o' : 'claude-sonnet-4-6'),
@@ -5375,16 +5600,30 @@ function renderSettings() {
       'Denied. Click the padlock/camera icon in the address bar and allow the microphone, then reload.');
 
     // API
-    const label = API.providerName() + ' API (' + (DB.settings().model || '?') + ')';
-    if (API.isLocal()) {
+    add('WebGPU (needed for the in-browser model)', BrowserLLM.supported(), BrowserLLM.supported() ? 'available' : 'missing',
+      'Only Chrome, Edge and Safari 18+ expose WebGPU. Without it, use a key-based provider or stay on the offline bank.');
+
+    const label = API.providerName() + ' (' + (DB.settings().provider === 'browser' ? (BrowserLLM.modelId || 'none loaded') : (DB.settings().model || '?')) + ')';
+    if (DB.settings().provider === 'browser') {
+      if (!BrowserLLM.ready) {
+        add(label, false, 'model not loaded',
+          'Go to Settings → Provider → In-browser model → "Download and load model". It is a one-time download.');
+      } else {
+        try {
+          const t0 = Date.now();
+          await API.call('Reply with the single word OK.', 'Say OK.', 16);
+          add(label, true, 'generating locally, ' + (Date.now() - t0) + ' ms', '');
+        } catch (e) { add(label, false, e.message, 'Reload the page and load the model again.'); }
+      }
+    } else if (API.isLocal() || DB.settings().noKeyNeeded) {
       try {
         const t0 = Date.now();
         await API.call('Reply with the single word OK.', 'Say OK.', 16);
-        add(label + ' — local, no key', true, 'reachable, ' + (Date.now() - t0) + ' ms', '');
+        add(label + ' — no key in browser', true, 'reachable, ' + (Date.now() - t0) + ' ms', '');
       } catch (e) {
-        add(label + ' — local, no key', false, e.message,
-          'Is the local server running? If it is, this is almost always CORS. Ollama: run ' +
-          'launchctl setenv OLLAMA_ORIGINS "*" and restart it. LM Studio: turn on "Enable CORS" in the server tab.');
+        add(label + ' — no key in browser', false, e.message,
+          'Is the server running and reachable? If it is, this is almost always CORS. Ollama: run ' +
+          'launchctl setenv OLLAMA_ORIGINS "*" and restart it. LM Studio: turn on "Enable CORS". A proxy must return Access-Control-Allow-Origin.');
       }
     } else if (!DB.settings().apiKey.trim()) {
       add(label, false, 'no key saved in this profile',

@@ -290,7 +290,7 @@ const Speaking = {
       const attempt = {
         id, ts: Date.now(), module: 'speaking', mode: s.cfg.mode, task: tk.item.task,
         item: tk.item, response: tk.transcript, wordCount: words(tk.transcript),
-        rating: res.rating, ratingSource: res.source,
+        rating: res.rating, ratingSource: res.source, ratingProvider: API.providerName() + " · " + (DB.settings().provider === "browser" ? (BrowserLLM.modelId || "") : DB.settings().model),
         analysis: { templates: tp, register: { want: 'n/a', flags: [] }, bulletsCovered: [] },
         clbNum: res.rating.overall_clb, clb: 'CLB ' + res.rating.overall_clb,
         timeUsedPct: tk.usedPct, allottedSec: tk.respSec, usedSec: Math.round(tk.respSec * tk.usedPct / 100),
