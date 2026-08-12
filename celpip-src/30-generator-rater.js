@@ -434,7 +434,8 @@ function heuristicRate(kind, item, text, analysis) {
     dimensions: D,
     overall_clb: overall,
     top_3_fixes: fixes.slice(0, 3),
-    rewritten_sample: '(Offline mode: no model rewrite available. Add your Anthropic API key in Settings to receive a rewritten sample one band above your current level.)',
+    rewritten_sample: '(No model connected, so there is no rewrite. To get one free with no key: ' +
+      'Settings → Provider → "In-browser model" → Download and load model. Everything else on this page was produced without a model.)',
     errors: analysis.localErrors.map(e => ({ type: e.type, mine: e.mine, correct: e.correct })),
     bullets_covered: covered,
     _offline: true
