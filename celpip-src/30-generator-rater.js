@@ -267,14 +267,28 @@ async function getItem(module, partOrTask, clbTarget) {
 /* ---------------- 30.5 THE RATER ---------------- */
 const RATER_SYSTEM = `You are a certified CELPIP rater. You are strict. You are marking against the official CELPIP-General rating scale, which reports a Canadian Language Benchmark (CLB) level from 3 to 12 for each of four dimensions.
 
+You are deliberately HARSHER than commercial practice platforms. Those platforms inflate scores to keep customers happy; that inflation is why candidates walk into the real test expecting a 9 and receive a 7. Your job is to be the unpleasant, accurate one. When genuinely torn between two bands, you award the lower one every single time.
+
 RULES YOU MUST FOLLOW:
 1. Score each of the four dimensions SEPARATELY. Do not let a strong dimension lift a weak one.
 2. For EACH dimension you must quote, verbatim, the single exact sentence from the candidate's response that CAPS that dimension — the sentence that prevents a higher band. Copy it character for character from the response. Do not paraphrase it. If the response is too short to contain such a sentence, quote the whole response.
-3. NEVER round up. If a response sits between two bands, award the lower band. A response with any recurring basic error (subject-verb agreement, article errors, homophone confusion, missing end punctuation) cannot exceed CLB 8 on Readability/Listenability, regardless of vocabulary.
-4. Formulaic, memorised scaffolding phrases are NOT evidence of range. When template density is reported to you as high, you must cap Vocabulary at CLB 7 and say so in the evidence field.
-5. Task Fulfillment: if ANY required bullet point is unaddressed, Task Fulfillment cannot exceed CLB 6. If the response is outside 150-200 words for Writing, deduct at least one band from Task Fulfillment and say so.
-6. The rewritten_sample must be the candidate's OWN ideas rewritten at roughly one band above their current level — not a model answer on a different topic, and not longer than the original by more than 15%.
-7. The "errors" array must list each distinct error you found, with the candidate's exact wording and the correction. Use only these type values: "homophone confusion", "dropped verb forms and auxiliaries", "missing end punctuation", "run-on sentences", "spelling", "article errors", "register mismatch".
+3. NEVER round up. If a response sits between two bands, award the lower band.
+4. The rewritten_sample must be the candidate's OWN ideas rewritten at roughly one band above their current level — not a model answer on a different topic, and not longer than the original by more than 15%.
+5. The "errors" array must list each distinct error you found, with the candidate's exact wording and the correction. Use only these type values: "homophone confusion", "dropped verb forms and auxiliaries", "missing end punctuation", "run-on sentences", "spelling", "article errors", "register mismatch".
+
+HARD CAPS — apply every one that is triggered, and name the trigger in the evidence field:
+A. ANY recurring basic error (subject-verb agreement, articles, homophone confusion, missing end punctuation) caps Readability/Listenability at CLB 8.
+B. THREE OR MORE distinct error types caps Readability/Listenability at CLB 6.
+C. Reported template density of 1.0 or higher per 100 words caps Vocabulary at CLB 7. Memorised scaffolding is never evidence of range.
+D. Template density of 3.0 or higher caps Vocabulary at CLB 6 AND Content/Coherence at CLB 7 — recycled framing is recycled thinking.
+E. ANY required bullet point unaddressed caps Task Fulfillment at CLB 6. Two unaddressed caps it at CLB 4.
+F. A response outside 150-200 words (Writing) costs at least one band of Task Fulfillment. Outside 120-240 words costs at least two.
+G. NO concrete specifics anywhere in the response — no number, no date, no name, no named consequence — caps Content/Coherence at CLB 7. Generalities are the single most common reason a fluent candidate stalls at 7.
+H. Every body paragraph opening the same way, or fewer than three distinct sentence openings, caps Readability/Listenability at CLB 7.
+I. A register mismatch flagged in the pre-analysis (wrong salutation, contractions in a formal email, gendered salutation to an unknown recipient) caps Task Fulfillment at CLB 6.
+J. For Speaking: a filler rate above 8 per 100 words caps Listenability at CLB 7.
+
+Apply the LOWEST cap that any triggered rule produces. Do not average the caps.
 
 Output JSON ONLY. No preamble, no markdown fences, no commentary after the JSON.`;
 
@@ -440,6 +454,75 @@ function heuristicRate(kind, item, text, analysis) {
     bullets_covered: covered,
     _offline: true
   };
+}
+
+/* ---------------- 30.5b DETERMINISTIC HARD CAPS ----------------
+   The rater prompt asks a model to apply these. Models are agreeable and
+   frequently do not. So the same caps are enforced again in code, against
+   measurements we compute ourselves, on BOTH the model rating and the offline
+   one. This is what makes the marking reliably harsher than platforms that
+   simply trust whatever the model returns. */
+function measureForCaps(kind, item, text, analysis) {
+  const T = String(text || '');
+  const errTypes = new Set(analysis.localErrors.map(e => e.type));
+  const sents = sentences(T);
+  const openings = new Set(sents.map(s => s.trim().split(/\s+/).slice(0, 2).join(' ').toLowerCase()));
+  /* "Concrete" has to be measurable, so it is defined as a quantity, a date or a
+     time — digits or spelled-out numbers or a named day/month. Trying to detect
+     proper nouns instead produces false positives on every sentence-initial word
+     ("Last but not least", "Sincerely"), which would let vague answers pass. */
+  const hasSpecifics = /\d/.test(T) ||
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/.test(T) ||
+    /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|hundred|thousand)\b/i.test(T);
+  const covered = analysis.bulletsCovered || [];
+  return {
+    distinctErrorTypes: errTypes.size,
+    anyBasicError: errTypes.size > 0,
+    templateDensity: analysis.templates.density,
+    bulletsMissing: covered.filter(c => !c).length,
+    wordCount: analysis.wordCount,
+    hasSpecifics,
+    distinctOpenings: openings.size,
+    registerBad: (analysis.register.flags || []).some(f => f.level === 'bad'),
+    fillerRate: analysis.wordCount ? analysis.fillers / (analysis.wordCount / 100) : 0
+  };
+}
+
+function applyHardCaps(kind, rating, item, text, analysis) {
+  const rdKey = kind === 'writing' ? 'readability' : 'listenability';
+  const m = measureForCaps(kind, item, text, analysis);
+  const applied = [];
+  const cap = (key, max, reason) => {
+    const d = rating.dimensions[key];
+    if (!d) return;
+    const n = Number(d.clb);
+    if (isFinite(n) && n > max) {
+      d.clb = max;
+      d.capped = (d.capped || []).concat(reason);
+      applied.push(reason + ' → ' + key.replace('_', '/') + ' capped at CLB ' + max);
+    }
+  };
+
+  if (m.anyBasicError) cap(rdKey, 8, 'Recurring basic error');
+  if (m.distinctErrorTypes >= 3) cap(rdKey, 6, m.distinctErrorTypes + ' distinct error types');
+  if (m.templateDensity >= 1.0) cap('vocabulary', 7, 'Template density ' + m.templateDensity + '/100 words');
+  if (m.templateDensity >= 3.0) { cap('vocabulary', 6, 'Very high template density'); cap('content_coherence', 7, 'Very high template density'); }
+  if (m.bulletsMissing >= 1) cap('task_fulfillment', 6, m.bulletsMissing + ' required point(s) unaddressed');
+  if (m.bulletsMissing >= 2) cap('task_fulfillment', 4, 'Two or more required points unaddressed');
+  if (kind === 'writing') {
+    if (m.wordCount < 150 || m.wordCount > 200) cap('task_fulfillment', 8, 'Length ' + m.wordCount + ' outside 150–200');
+    if (m.wordCount < 120 || m.wordCount > 240) cap('task_fulfillment', 6, 'Length ' + m.wordCount + ' well outside range');
+  }
+  if (!m.hasSpecifics && m.wordCount > 60) cap('content_coherence', 7, 'No concrete specifics (number, date, name)');
+  if (m.distinctOpenings < 3 && sentences(text).length >= 4) cap(rdKey, 7, 'Fewer than three distinct sentence openings');
+  if (m.registerBad) cap('task_fulfillment', 6, 'Register mismatch');
+  if (kind === 'speaking' && m.fillerRate > 8) cap('listenability', 7, 'Filler rate ' + m.fillerRate.toFixed(1) + '/100 words');
+
+  rating._capsApplied = applied;
+  rating._measures = m;
+  const keys = ['content_coherence', 'vocabulary', rdKey, 'task_fulfillment'];
+  rating.overall_clb = anchoredOverall(keys.map(k => Number(rating.dimensions[k] && rating.dimensions[k].clb)).filter(n => !isNaN(n)));
+  return rating;
 }
 
 /* ---------------- 30.6b "Your answer, corrected" (works offline) ----------------
@@ -641,13 +724,14 @@ async function rateResponse(kind, item, text, timeUsedPct, respSeconds) {
           if (!r.errors.some(e => String(e.mine || '').toLowerCase() === le.mine.toLowerCase())) r.errors.push(le);
         });
         r.bullets_covered = r.bullets_covered || analysis.bulletsCovered;
+        applyHardCaps(kind, r, item, text, analysis);
         // If every dimension had to be refilled, this was not really a model rating.
         return { rating: r, analysis, source: patched.length === keys.length ? 'offline' : 'api' };
       }
     } catch (e) {
       console.warn('rating failed, using offline heuristic:', e.message);
-      return { rating: heuristicRate(kind, item, text, analysis), analysis, source: 'offline', error: e.message };
+      return { rating: applyHardCaps(kind, heuristicRate(kind, item, text, analysis), item, text, analysis), analysis, source: 'offline', error: e.message };
     }
   }
-  return { rating: heuristicRate(kind, item, text, analysis), analysis, source: 'offline' };
+  return { rating: applyHardCaps(kind, heuristicRate(kind, item, text, analysis), item, text, analysis), analysis, source: 'offline' };
 }

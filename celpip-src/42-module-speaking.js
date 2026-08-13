@@ -131,26 +131,40 @@ const Speaking = {
     this.intro();
   },
 
+  /* The real Speaking test runs about 20 minutes for 8 tasks whose prep and
+     response time totals roughly 16. The difference is the instruction screen
+     before each task, which advances on its own. Reproducing it matters: it is
+     the only rest you get, and candidates who have never sat the full sequence
+     underestimate how tiring eight unbroken tasks are. */
   intro() {
     const s = this.s;
     const item = s.items[s.idx];
     const spec = SPEAKING_SPEC[item.task];
+    const INSTRUCTION_SECS = 20;
     const wrap = el('div');
     wrap.appendChild(examChrome('Speaking — Task ' + item.task + (spec.scored ? '' : ' (not scored)') + ': ' + spec.name,
       'Task ' + (s.idx + 1) + ' of ' + s.items.length + '  ·  ' + spec.prep + 's preparation, ' + spec.resp + 's response', null));
     const body = el('div', { class: 'wrap' });
     wrap.appendChild(body);
     const c = el('div', { class: 'card center' });
-    c.innerHTML = '<h2>Task ' + item.task + ' — ' + esc(spec.name) + '</h2>' +
+    c.innerHTML = '<div class="tag">INSTRUCTIONS</div>' +
+      '<h2>Task ' + item.task + ' — ' + esc(spec.name) + '</h2>' +
       '<p class="muted">You will get <strong>' + spec.prep + ' seconds</strong> to prepare' +
       (spec.choose ? ' (after ' + spec.choose + ' seconds to choose an option)' : '') +
       ', then recording starts <strong>automatically</strong> for <strong>' + spec.resp + ' seconds</strong>.</p>' +
-      '<div class="flagline">There is no pause, no re-record and no skip — exactly like the real test. Speak until the timer stops you.</div>';
-    const b = el('button', { class: 'btn lg', text: 'Begin Task ' + item.task });
-    b.onclick = () => (spec.choose ? this.choosePhase() : this.prepPhase());
+      '<div class="flagline">There is no pause, no re-record and no skip — exactly like the real test. Speak until the timer stops you.</div>' +
+      '<div class="bigtimer" id="bt" aria-live="polite">' + INSTRUCTION_SECS + '</div>' +
+      '<p class="tiny muted">This advances on its own, as it does on test day.</p>';
+    const b = el('button', { class: 'btn', text: 'Skip ahead' });
+    const go2 = () => { if (s.phaseTimer) s.phaseTimer.stop(); (spec.choose ? this.choosePhase() : this.prepPhase()); };
+    b.onclick = go2;
     c.appendChild(b);
     body.appendChild(c);
     setScreen(wrap);
+    const t = new Timer(INSTRUCTION_SECS, null, go2);
+    t.onTick = left => { const n = $('#bt'); if (n) n.textContent = Math.ceil(left); };
+    t.start();
+    s.phaseTimer = t;
   },
 
   promptBody(item) {

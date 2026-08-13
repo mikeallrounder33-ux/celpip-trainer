@@ -92,6 +92,101 @@ function lineChart(series, opts) {
   return box;
 }
 
+/* ---------------- 50.2b STUDY PLAN ----------------
+   No model needed. Everything here is already recorded; it was simply never
+   turned into an instruction. Ordered by what costs the most marks. */
+function buildStudyPlan(attempts, errors) {
+  const plan = [];
+
+  // 1. weakest Listening/Reading part, pooled
+  const pooled = {};
+  attempts.forEach(a => {
+    if (a.module !== 'listening' && a.module !== 'reading') return;
+    (a.perPart || []).forEach(p => {
+      const k = a.module + ':' + p.part;
+      if (!pooled[k]) pooled[k] = { module: a.module, part: p.part, name: p.name, correct: 0, total: 0 };
+      pooled[k].correct += p.correct; pooled[k].total += p.total;
+    });
+  });
+  const weakest = Object.values(pooled).filter(p => p.total >= 5)
+    .sort((a, b) => (a.correct / a.total) - (b.correct / b.total))[0];
+  if (weakest && weakest.correct / weakest.total < 0.8) {
+    plan.push({
+      what: 'Drill ' + weakest.module[0].toUpperCase() + weakest.module.slice(1) + ' Part ' + weakest.part + ' — ' + weakest.name,
+      why: 'Your weakest part at ' + Math.round(100 * weakest.correct / weakest.total) + '% across ' + weakest.total + ' questions.',
+      action: () => (weakest.module === 'listening'
+        ? Listening.start({ mode: 'drill', parts: [weakest.part] })
+        : Reading.start({ mode: 'drill', parts: [weakest.part] }))
+    });
+  }
+
+  // 2. never attempted
+  const done = new Set();
+  attempts.forEach(a => {
+    if (a.module === 'writing' || a.module === 'speaking') done.add(a.module + ':' + a.task);
+    else (a.perPart || []).forEach(p => done.add(a.module + ':' + p.part));
+  });
+  const missing = [];
+  [1, 2, 3, 4, 5, 6].forEach(p => { if (!done.has('listening:' + p)) missing.push({ m: 'listening', t: p, n: LISTENING_SPEC[p].name }); });
+  [1, 2, 3, 4].forEach(p => { if (!done.has('reading:' + p)) missing.push({ m: 'reading', t: p, n: READING_SPEC[p].name }); });
+  [1, 2].forEach(t => { if (!done.has('writing:' + t)) missing.push({ m: 'writing', t, n: t === 1 ? 'Email' : 'Survey' }); });
+  [1, 2, 3, 4, 5, 6, 7, 8].forEach(t => { if (!done.has('speaking:' + t)) missing.push({ m: 'speaking', t, n: SPEAKING_SPEC[t].name }); });
+  if (missing.length) {
+    const x = missing[0];
+    plan.push({
+      what: 'Try ' + x.m[0].toUpperCase() + x.m.slice(1) + ' ' + (x.m === 'writing' || x.m === 'speaking' ? 'Task ' : 'Part ') + x.t + ' — ' + x.n,
+      why: missing.length + ' task type' + (missing.length === 1 ? '' : 's') + ' still untried. An untried task is an unknown risk on test day.',
+      action: () => ({
+        listening: () => Listening.start({ mode: 'drill', parts: [x.t] }),
+        reading: () => Reading.start({ mode: 'drill', parts: [x.t] }),
+        writing: () => Writing.start({ mode: 'drill', tasks: [x.t] }),
+        speaking: () => Speaking.start({ mode: 'drill', tasks: [x.t] })
+      }[x.m]())
+    });
+  }
+
+  // 3. the error that keeps coming back
+  const top = errors.filter(e => e.count >= 2)[0];
+  if (top) {
+    plan.push({
+      what: 'Fix "' + top.mine + '" → "' + top.correct + '"',
+      why: top.type + ', seen ' + top.count + ' times. Write five sentences using the correct form before your next Writing task.',
+      action: () => go('errors')
+    });
+  }
+
+  // 4. time discipline
+  const timed = attempts.filter(a => typeof a.timeUsedPct === 'number');
+  const avg = timed.length ? timed.reduce((s, a) => s + a.timeUsedPct, 0) / timed.length : 100;
+  if (timed.length >= 2 && avg < 85) {
+    plan.push({
+      what: 'Use the whole clock',
+      why: 'You average ' + Math.round(avg) + '% of the allotted time. The unused minutes are free marks — reread instead of submitting.',
+      action: null
+    });
+  }
+
+  // 5. template habit
+  const prod = attempts.filter(a => a.analysis && a.analysis.templates);
+  const tplAvg = prod.length ? prod.reduce((s, a) => s + a.analysis.templates.total, 0) / prod.length : 0;
+  if (prod.length >= 2 && tplAvg >= 1) {
+    plan.push({
+      what: 'Cut the memorised openers',
+      why: 'You average ' + tplAvg.toFixed(1) + ' template phrases per response. At 1.0 density or higher, Vocabulary is capped at CLB 7 automatically.',
+      action: () => Writing.start({ mode: 'drill', tasks: [1] })
+    });
+  }
+
+  if (!plan.length) {
+    plan.push({
+      what: 'Sit a full section under real timing',
+      why: 'Nothing is flagged yet. A full timed section is the fastest way to produce something worth analysing.',
+      action: () => go('section')
+    });
+  }
+  return plan.slice(0, 5);
+}
+
 /* ---------------- 50.3 DASHBOARD ---------------- */
 function attemptCLB(a) {
   if (a.module === 'listening' || a.module === 'reading') {
@@ -142,6 +237,58 @@ function renderDashboard() {
   trend.innerHTML = '<h3>CLB trend by module</h3><p class="tiny muted">Oldest attempt on the left. Listening and Reading appear only for full 38-question sections.</p>';
   trend.appendChild(lineChart(series, { w: 900, h: 220 }));
   wrap.appendChild(trend);
+
+  // ---- study plan, derived from what the app already knows ----
+  const plan = buildStudyPlan(attempts, errors);
+  const pc = el('div', { class: 'card' });
+  pc.innerHTML = '<h3>What to do next</h3><p class="tiny muted">Generated from your own results — ' +
+    'weakest parts first, then what you have avoided, then the errors that keep coming back.</p>';
+  const planBox = el('div', { class: 'plan' });
+  plan.forEach((p, i) => {
+    const row = el('div', { class: 'planrow' });
+    row.appendChild(el('div', { class: 'rank', text: String(i + 1) }));
+    const mid = el('div');
+    mid.innerHTML = '<strong>' + esc(p.what) + '</strong><div class="why">' + esc(p.why) + '</div>';
+    row.appendChild(mid);
+    if (p.action) {
+      const b = el('button', { class: 'btn sm', text: 'Start' });
+      b.onclick = p.action;
+      row.appendChild(b);
+    } else row.appendChild(el('span'));
+    planBox.appendChild(row);
+  });
+  pc.appendChild(planBox);
+  wrap.appendChild(pc);
+
+  // ---- accuracy by part, pooled across every attempt ----
+  const pooled = {};
+  attempts.forEach(a => {
+    if (a.module !== 'listening' && a.module !== 'reading') return;
+    (a.perPart || []).forEach(p => {
+      const k = a.module + ':' + p.part;
+      if (!pooled[k]) pooled[k] = { module: a.module, part: p.part, name: p.name, correct: 0, total: 0 };
+      pooled[k].correct += p.correct; pooled[k].total += p.total;
+    });
+  });
+  const pooledArr = Object.values(pooled).filter(p => p.total).sort((a, b) => (a.correct / a.total) - (b.correct / b.total));
+  if (pooledArr.length) {
+    const ac = el('div', { class: 'card' });
+    ac.innerHTML = '<h3>Accuracy by part, all attempts pooled</h3><p class="tiny muted">Weakest first. One bad section is noise; a part that stays low across attempts is a gap.</p>';
+    const t = el('table');
+    t.innerHTML = '<thead><tr><th>Module &amp; part</th><th>Correct</th><th>Rate</th><th>Attempts</th></tr></thead>';
+    const tb = el('tbody');
+    pooledArr.forEach(p => {
+      const rate = Math.round(100 * p.correct / p.total);
+      const tr = el('tr');
+      tr.innerHTML = '<td>' + esc(p.module[0].toUpperCase() + p.module.slice(1)) + ' P' + p.part + ' — ' + esc(p.name) + '</td>' +
+        '<td class="mono">' + p.correct + ' / ' + p.total + '</td>' +
+        '<td><span class="tag ' + (rate >= 80 ? 'ok' : rate >= 65 ? 'warn' : 'bad') + '">' + rate + '%</span></td>' +
+        '<td class="mono">' + Math.max(1, Math.round(p.total / (LISTENING_SPEC[p.part] && p.module === 'listening' ? LISTENING_SPEC[p.part].q : (READING_SPEC[p.part] ? READING_SPEC[p.part].q : p.total)))) + '</td>';
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); ac.appendChild(t);
+    wrap.appendChild(ac);
+  }
 
   // ---- repeat offenders ----
   const ro = el('div', { class: 'card' });

@@ -24,8 +24,8 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%231f5fd0'/%3E%3Ctext x='32' y='45' font-family='-apple-system,Segoe UI,Helvetica,Arial,sans-serif' font-size='34' font-weight='700' fill='white' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
 <style>
 :root{
-  --bg:#f5f6f8; --panel:#ffffff; --ink:#15181d; --muted:#5d6673; --line:#dfe3e9;
-  --brand:#1f5fd0; --brand-dk:#17439a; --ok:#12805c; --warn:#b06a00; --bad:#c0332e;
+  --bg:#f5f6f8; --panel:#ffffff; --ink:#15181d; --muted:#525b68; --line:#dfe3e9;
+  --brand:#1b56c4; --brand-dk:#123c8e; --ok:#0f6f50; --warn:#8f5500; --bad:#b02a24;
   --soft:#eef3fd; --radius:10px; --shadow:0 1px 3px rgba(20,25,35,.09),0 6px 18px rgba(20,25,35,.05);
 }
 *{box-sizing:border-box}
@@ -169,6 +169,36 @@ ul.clean li{margin-bottom:4px}
 .bullets li{margin-bottom:5px; font-weight:550}
 .wc{font-variant-numeric:tabular-nums; font-weight:650}
 .wc.bad{color:var(--bad)} .wc.ok{color:var(--ok)}
+
+/* ---------- accessibility ---------- */
+:focus-visible{outline:3px solid var(--brand); outline-offset:2px; border-radius:4px}
+.opt:focus-within{outline:3px solid var(--brand); outline-offset:2px}
+.skip{position:absolute;left:-9999px;top:0;background:var(--brand);color:#fff;padding:10px 16px;border-radius:0 0 8px 0;z-index:200}
+.skip:focus{left:0}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+}
+
+/* ---------- study plan ---------- */
+.plan{display:flex;flex-direction:column;gap:10px}
+.planrow{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;
+  border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:#fff}
+.planrow .rank{font-variant-numeric:tabular-nums;font-weight:750;color:var(--muted);font-size:13px;min-width:18px}
+.planrow .why{font-size:13px;color:var(--muted)}
+@media(max-width:640px){.planrow{grid-template-columns:1fr;gap:8px}}
+
+/* ---------- print / save as PDF ---------- */
+@media print{
+  .topbar,.exambar,footer,.noprint,button{display:none !important}
+  body{background:#fff}
+  .wrap{max-width:100%;padding:0}
+  .card{break-inside:avoid;box-shadow:none;border-color:#bbb}
+  .grid{display:block}
+  .grid>*{margin-bottom:12px}
+  .passage{border-color:#bbb}
+  a[href]:after{content:""}
+  .dim{break-inside:avoid}
+}
 </style>
 </head>
 <body>
@@ -178,7 +208,8 @@ ul.clean li{margin-bottom:4px}
   <div class="spacer"></div>
   <div class="tiny muted" id="keystate"></div>
 </div>
-<div id="app"></div>
+<a class="skip" href="#app">Skip to content</a>
+<div id="app" role="main" tabindex="-1"></div>
 <footer style="border-top:1px solid var(--line);background:#fff;padding:16px 18px;margin-top:40px">
   <div style="max-width:1080px;margin:0 auto" class="tiny muted">
     <strong>Not affiliated with CELPIP.</strong> CELPIP is a registered trademark of Paragon Testing Enterprises.
@@ -287,14 +318,19 @@ const DB = {
 const MEM = { audio: {}, genCache: {}, sessionSeen: new Set() };
 
 /* ---------- 10.4 CLB estimate from raw L/R score (out of 38) ---------- */
+/* The official scale runs M (minimal), then 1 to 12. Our raw-score mapping cannot
+   distinguish 10 from 12 — a perfect raw score is consistent with any of them — so
+   the top band is reported as a range rather than invented precision. */
 function clbFromRaw(raw) {
-  if (raw >= 36) return { clb: 10, label: 'CLB 10+' };
+  if (raw >= 36) return { clb: 10, label: 'CLB 10–12' };
   if (raw >= 33) return { clb: 9, label: 'CLB 9' };
   if (raw >= 29) return { clb: 8, label: 'CLB 8' };
   if (raw >= 25) return { clb: 7, label: 'CLB 7' };
   if (raw >= 21) return { clb: 6, label: 'CLB 6' };
   if (raw >= 17) return { clb: 5, label: 'CLB 5' };
-  return { clb: 4, label: 'CLB 4 or below' };
+  if (raw >= 13) return { clb: 4, label: 'CLB 4' };
+  if (raw >= 9) return { clb: 3, label: 'CLB 3' };
+  return { clb: 2, label: 'CLB M–2 (minimal)' };
 }
 
 /* Lowest-anchored blend: never a generous average.
@@ -3634,14 +3670,28 @@ async function getItem(module, partOrTask, clbTarget) {
 /* ---------------- 30.5 THE RATER ---------------- */
 const RATER_SYSTEM = `You are a certified CELPIP rater. You are strict. You are marking against the official CELPIP-General rating scale, which reports a Canadian Language Benchmark (CLB) level from 3 to 12 for each of four dimensions.
 
+You are deliberately HARSHER than commercial practice platforms. Those platforms inflate scores to keep customers happy; that inflation is why candidates walk into the real test expecting a 9 and receive a 7. Your job is to be the unpleasant, accurate one. When genuinely torn between two bands, you award the lower one every single time.
+
 RULES YOU MUST FOLLOW:
 1. Score each of the four dimensions SEPARATELY. Do not let a strong dimension lift a weak one.
 2. For EACH dimension you must quote, verbatim, the single exact sentence from the candidate's response that CAPS that dimension — the sentence that prevents a higher band. Copy it character for character from the response. Do not paraphrase it. If the response is too short to contain such a sentence, quote the whole response.
-3. NEVER round up. If a response sits between two bands, award the lower band. A response with any recurring basic error (subject-verb agreement, article errors, homophone confusion, missing end punctuation) cannot exceed CLB 8 on Readability/Listenability, regardless of vocabulary.
-4. Formulaic, memorised scaffolding phrases are NOT evidence of range. When template density is reported to you as high, you must cap Vocabulary at CLB 7 and say so in the evidence field.
-5. Task Fulfillment: if ANY required bullet point is unaddressed, Task Fulfillment cannot exceed CLB 6. If the response is outside 150-200 words for Writing, deduct at least one band from Task Fulfillment and say so.
-6. The rewritten_sample must be the candidate's OWN ideas rewritten at roughly one band above their current level — not a model answer on a different topic, and not longer than the original by more than 15%.
-7. The "errors" array must list each distinct error you found, with the candidate's exact wording and the correction. Use only these type values: "homophone confusion", "dropped verb forms and auxiliaries", "missing end punctuation", "run-on sentences", "spelling", "article errors", "register mismatch".
+3. NEVER round up. If a response sits between two bands, award the lower band.
+4. The rewritten_sample must be the candidate's OWN ideas rewritten at roughly one band above their current level — not a model answer on a different topic, and not longer than the original by more than 15%.
+5. The "errors" array must list each distinct error you found, with the candidate's exact wording and the correction. Use only these type values: "homophone confusion", "dropped verb forms and auxiliaries", "missing end punctuation", "run-on sentences", "spelling", "article errors", "register mismatch".
+
+HARD CAPS — apply every one that is triggered, and name the trigger in the evidence field:
+A. ANY recurring basic error (subject-verb agreement, articles, homophone confusion, missing end punctuation) caps Readability/Listenability at CLB 8.
+B. THREE OR MORE distinct error types caps Readability/Listenability at CLB 6.
+C. Reported template density of 1.0 or higher per 100 words caps Vocabulary at CLB 7. Memorised scaffolding is never evidence of range.
+D. Template density of 3.0 or higher caps Vocabulary at CLB 6 AND Content/Coherence at CLB 7 — recycled framing is recycled thinking.
+E. ANY required bullet point unaddressed caps Task Fulfillment at CLB 6. Two unaddressed caps it at CLB 4.
+F. A response outside 150-200 words (Writing) costs at least one band of Task Fulfillment. Outside 120-240 words costs at least two.
+G. NO concrete specifics anywhere in the response — no number, no date, no name, no named consequence — caps Content/Coherence at CLB 7. Generalities are the single most common reason a fluent candidate stalls at 7.
+H. Every body paragraph opening the same way, or fewer than three distinct sentence openings, caps Readability/Listenability at CLB 7.
+I. A register mismatch flagged in the pre-analysis (wrong salutation, contractions in a formal email, gendered salutation to an unknown recipient) caps Task Fulfillment at CLB 6.
+J. For Speaking: a filler rate above 8 per 100 words caps Listenability at CLB 7.
+
+Apply the LOWEST cap that any triggered rule produces. Do not average the caps.
 
 Output JSON ONLY. No preamble, no markdown fences, no commentary after the JSON.`;
 
@@ -3807,6 +3857,75 @@ function heuristicRate(kind, item, text, analysis) {
     bullets_covered: covered,
     _offline: true
   };
+}
+
+/* ---------------- 30.5b DETERMINISTIC HARD CAPS ----------------
+   The rater prompt asks a model to apply these. Models are agreeable and
+   frequently do not. So the same caps are enforced again in code, against
+   measurements we compute ourselves, on BOTH the model rating and the offline
+   one. This is what makes the marking reliably harsher than platforms that
+   simply trust whatever the model returns. */
+function measureForCaps(kind, item, text, analysis) {
+  const T = String(text || '');
+  const errTypes = new Set(analysis.localErrors.map(e => e.type));
+  const sents = sentences(T);
+  const openings = new Set(sents.map(s => s.trim().split(/\s+/).slice(0, 2).join(' ').toLowerCase()));
+  /* "Concrete" has to be measurable, so it is defined as a quantity, a date or a
+     time — digits or spelled-out numbers or a named day/month. Trying to detect
+     proper nouns instead produces false positives on every sentence-initial word
+     ("Last but not least", "Sincerely"), which would let vague answers pass. */
+  const hasSpecifics = /\d/.test(T) ||
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/.test(T) ||
+    /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|hundred|thousand)\b/i.test(T);
+  const covered = analysis.bulletsCovered || [];
+  return {
+    distinctErrorTypes: errTypes.size,
+    anyBasicError: errTypes.size > 0,
+    templateDensity: analysis.templates.density,
+    bulletsMissing: covered.filter(c => !c).length,
+    wordCount: analysis.wordCount,
+    hasSpecifics,
+    distinctOpenings: openings.size,
+    registerBad: (analysis.register.flags || []).some(f => f.level === 'bad'),
+    fillerRate: analysis.wordCount ? analysis.fillers / (analysis.wordCount / 100) : 0
+  };
+}
+
+function applyHardCaps(kind, rating, item, text, analysis) {
+  const rdKey = kind === 'writing' ? 'readability' : 'listenability';
+  const m = measureForCaps(kind, item, text, analysis);
+  const applied = [];
+  const cap = (key, max, reason) => {
+    const d = rating.dimensions[key];
+    if (!d) return;
+    const n = Number(d.clb);
+    if (isFinite(n) && n > max) {
+      d.clb = max;
+      d.capped = (d.capped || []).concat(reason);
+      applied.push(reason + ' → ' + key.replace('_', '/') + ' capped at CLB ' + max);
+    }
+  };
+
+  if (m.anyBasicError) cap(rdKey, 8, 'Recurring basic error');
+  if (m.distinctErrorTypes >= 3) cap(rdKey, 6, m.distinctErrorTypes + ' distinct error types');
+  if (m.templateDensity >= 1.0) cap('vocabulary', 7, 'Template density ' + m.templateDensity + '/100 words');
+  if (m.templateDensity >= 3.0) { cap('vocabulary', 6, 'Very high template density'); cap('content_coherence', 7, 'Very high template density'); }
+  if (m.bulletsMissing >= 1) cap('task_fulfillment', 6, m.bulletsMissing + ' required point(s) unaddressed');
+  if (m.bulletsMissing >= 2) cap('task_fulfillment', 4, 'Two or more required points unaddressed');
+  if (kind === 'writing') {
+    if (m.wordCount < 150 || m.wordCount > 200) cap('task_fulfillment', 8, 'Length ' + m.wordCount + ' outside 150–200');
+    if (m.wordCount < 120 || m.wordCount > 240) cap('task_fulfillment', 6, 'Length ' + m.wordCount + ' well outside range');
+  }
+  if (!m.hasSpecifics && m.wordCount > 60) cap('content_coherence', 7, 'No concrete specifics (number, date, name)');
+  if (m.distinctOpenings < 3 && sentences(text).length >= 4) cap(rdKey, 7, 'Fewer than three distinct sentence openings');
+  if (m.registerBad) cap('task_fulfillment', 6, 'Register mismatch');
+  if (kind === 'speaking' && m.fillerRate > 8) cap('listenability', 7, 'Filler rate ' + m.fillerRate.toFixed(1) + '/100 words');
+
+  rating._capsApplied = applied;
+  rating._measures = m;
+  const keys = ['content_coherence', 'vocabulary', rdKey, 'task_fulfillment'];
+  rating.overall_clb = anchoredOverall(keys.map(k => Number(rating.dimensions[k] && rating.dimensions[k].clb)).filter(n => !isNaN(n)));
+  return rating;
 }
 
 /* ---------------- 30.6b "Your answer, corrected" (works offline) ----------------
@@ -4008,15 +4127,16 @@ async function rateResponse(kind, item, text, timeUsedPct, respSeconds) {
           if (!r.errors.some(e => String(e.mine || '').toLowerCase() === le.mine.toLowerCase())) r.errors.push(le);
         });
         r.bullets_covered = r.bullets_covered || analysis.bulletsCovered;
+        applyHardCaps(kind, r, item, text, analysis);
         // If every dimension had to be refilled, this was not really a model rating.
         return { rating: r, analysis, source: patched.length === keys.length ? 'offline' : 'api' };
       }
     } catch (e) {
       console.warn('rating failed, using offline heuristic:', e.message);
-      return { rating: heuristicRate(kind, item, text, analysis), analysis, source: 'offline', error: e.message };
+      return { rating: applyHardCaps(kind, heuristicRate(kind, item, text, analysis), item, text, analysis), analysis, source: 'offline', error: e.message };
     }
   }
-  return { rating: heuristicRate(kind, item, text, analysis), analysis, source: 'offline' };
+  return { rating: applyHardCaps(kind, heuristicRate(kind, item, text, analysis), item, text, analysis), analysis, source: 'offline' };
 }
 /* ============================================================
    PART 40 — LISTENING & READING RUNNERS (auto-marked)
@@ -4036,7 +4156,7 @@ function examChrome(title, subtitle, timer) {
   bar.innerHTML =
     '<div><div style="font-weight:700">' + esc(title) + '</div><div class="tiny muted">' + esc(subtitle || '') + '</div></div>' +
     '<div style="flex:1"><div class="bar"><i style="width:100%"></i></div></div>' +
-    '<div class="clock">--:--</div>';
+    '<div class="clock" role="timer" aria-live="off" aria-atomic="true">--:--</div>';
   if (timer) bindClock(bar, timer);
   return bar;
 }
@@ -4069,7 +4189,19 @@ const Listening = {
     }
     if (!items.length) { APP.examMode = false; go('dashboard'); return; }
 
-    const qTotal = items.reduce((a, i) => a + i.blocks.reduce((x, b) => x + b.questions.length, 0), 0);
+    // The real test embeds unscored trial items you cannot identify. Practising
+    // without them fails to train the "strange question, don't panic" reflex.
+    if (cfg.mode !== 'drill') {
+      const tp = pick([2, 3, 4, 6]);
+      const extra = await getItem('listening', tp);
+      if (extra.item) {
+        extra.item._source = extra.source;
+        extra.item._trial = true;
+        items.splice(1 + Math.floor(Math.random() * (items.length - 1)), 0, extra.item);
+      }
+    }
+
+    const qTotal = items.filter(i => !i._trial).reduce((a, i) => a + i.blocks.reduce((x, b) => x + b.questions.length, 0), 0);
     const allotted = cfg.mode === 'drill' ? partAllotment('listening', qTotal) : MODULE_TIME.listening;
 
     this.s = {
@@ -4090,8 +4222,7 @@ const Listening = {
     wrap.appendChild(examChrome(
       'Listening — Part ' + item.part + ': ' + spec.name,
       'Passage ' + (s.idx + 1) + ' of ' + s.items.length +
-      (item.blocks.length > 1 ? '  ·  Section ' + (s.blockIdx + 1) + ' of ' + item.blocks.length : '') +
-      '  ·  target CLB ' + (item.clb || '?') + '  ·  ' + (item._source === 'api' ? 'generated' : 'offline bank'),
+      (item.blocks.length > 1 ? '  ·  Section ' + (s.blockIdx + 1) + ' of ' + item.blocks.length : ''),
       s.timer));
     const body = el('div', { class: 'wrap' });
     wrap.appendChild(body);
@@ -4213,12 +4344,14 @@ const Listening = {
     s.timer.stop();
     if (s.speaking) s.speaking.cancel();
     APP.examMode = false;
-    const raw = s.answers.filter(a => a.ok).length;
+    const trialIds = new Set(s.items.filter(i => i._trial).map(i => i.id));
+    const scored = s.answers.filter(a => !trialIds.has(a.itemId));
+    const raw = scored.filter(a => a.ok).length;
     const usedPct = Math.round(s.timer.usedPct());
     const perPart = {};
-    s.items.forEach(it => { perPart[it.part] = { part: it.part, name: LISTENING_SPEC[it.part].name, correct: 0, total: 0 }; });
-    s.answers.forEach(a => { if (perPart[a.part]) { perPart[a.part].total++; if (a.ok) perPart[a.part].correct++; } });
-    s.items.forEach(it => {
+    s.items.filter(i => !i._trial).forEach(it => { perPart[it.part] = { part: it.part, name: LISTENING_SPEC[it.part].name, correct: 0, total: 0 }; });
+    scored.forEach(a => { if (perPart[a.part]) { perPart[a.part].total++; if (a.ok) perPart[a.part].correct++; } });
+    s.items.filter(i => !i._trial).forEach(it => {
       const q = it.blocks.reduce((x, b) => x + b.questions.length, 0);
       if (perPart[it.part]) perPart[it.part].total = q;
     });
@@ -4228,6 +4361,7 @@ const Listening = {
       raw, total: s.qTotal, isFullSection: full,
       clb: full ? clbFromRaw(raw).label : null,
       perPart: Object.values(perPart),
+      trialCount: s.items.filter(i => i._trial).reduce((a, i) => a + i.blocks.reduce((x, b) => x + b.questions.length, 0), 0),
       answers: s.answers, items: s.items, timeUsedPct: usedPct,
       allottedSec: s.allotted, usedSec: Math.round(s.timer.usedSec()), timedOut: !!timedOut
     };
@@ -4323,7 +4457,16 @@ const Reading = {
     }
     if (!items.length) { APP.examMode = false; go('dashboard'); return; }
 
-    const qTotal = items.reduce((a, i) => a + readingQCount(i), 0);
+    if (cfg.mode !== 'drill') {
+      const extra = await getItem('reading', pick([1, 2, 3, 4]));
+      if (extra.item) {
+        extra.item._source = extra.source;
+        extra.item._trial = true;
+        items.splice(1 + Math.floor(Math.random() * (items.length - 1)), 0, extra.item);
+      }
+    }
+
+    const qTotal = items.filter(i => !i._trial).reduce((a, i) => a + readingQCount(i), 0);
     const allotted = cfg.mode === 'drill' ? partAllotment('reading', qTotal) : MODULE_TIME.reading;
     this.s = { cfg, items, qTotal, allotted, idx: 0, answers: {}, timer: new Timer(allotted, null, () => this.finish(true)) };
     this.s.timer.start();
@@ -4342,8 +4485,7 @@ const Reading = {
     const A = this.ans(item);
     const wrap = el('div');
     wrap.appendChild(examChrome('Reading — Part ' + item.part + ': ' + spec.name,
-      'Passage ' + (s.idx + 1) + ' of ' + s.items.length + '  ·  target CLB ' + (item.clb || '?') + '  ·  ' + (item._source === 'api' ? 'generated' : 'offline bank'),
-      s.timer));
+      'Passage ' + (s.idx + 1) + ' of ' + s.items.length, s.timer));
     const body = el('div', { class: 'wrap wide' });
     wrap.appendChild(body);
 
@@ -4473,6 +4615,7 @@ const Reading = {
       if (it.mc) it.mc.forEach((q, i) => { t++; const ok = A.mc[i] === q.a; if (ok) c++; detail.push({ itemId: it.id, part: it.part, kind: 'mc', i, chosen: A.mc[i], correct: q.a, ok }); });
       if (it.blanks) it.blanks.forEach((b, i) => { t++; const ok = A.blanks[i] === b.a; if (ok) c++; detail.push({ itemId: it.id, part: it.part, kind: 'blank', i, chosen: A.blanks[i], correct: b.a, ok }); });
       if (it.statements) it.statements.forEach((st, i) => { t++; const ok = A.statements[i] === st.a; if (ok) c++; detail.push({ itemId: it.id, part: it.part, kind: 'stmt', i, chosen: A.statements[i], correct: st.a, ok }); });
+      if (it._trial) return;                       // trial passage: answered, never scored
       raw += c; total += t;
       perPart.push({ part: it.part, name: READING_SPEC[it.part].name, correct: c, total: t });
     });
@@ -4480,7 +4623,8 @@ const Reading = {
     const attempt = {
       id: uid(), ts: Date.now(), module: 'reading', mode: s.cfg.mode,
       raw, total, isFullSection: full, clb: full ? clbFromRaw(raw).label : null,
-      perPart, answers: detail, rawAnswers: s.answers, items: s.items,
+      perPart, trialCount: s.items.filter(i => i._trial).reduce((a, i) => a + readingQCount(i), 0),
+      answers: detail, rawAnswers: s.answers, items: s.items,
       timeUsedPct: Math.round(s.timer.usedPct()), allottedSec: s.allotted,
       usedSec: Math.round(s.timer.usedSec()), timedOut: !!timedOut
     };
@@ -4511,6 +4655,9 @@ function showLRResult(a) {
     (est
       ? '<p class="tiny muted" style="margin-top:12px">This is an <strong>estimate only</strong>, mapped from your raw score out of 38. It is not an official CELPIP result and the real conversion varies by test form.</p>'
       : '<p class="tiny muted" style="margin-top:12px">A CLB estimate is only shown for a full 38-question section. This was a ' + a.total + '-question drill (' + pct + '% correct).</p>') +
+    (a.trialCount ? '<div class="flagline" style="margin-top:10px">This section contained <strong>' + a.trialCount +
+      ' unscored trial questions</strong>, mixed in where you could not identify them — exactly as the real test does. ' +
+      'They are excluded from the score above. If a passage felt strange, that may be why.</div>' : '') +
     (a.timedOut ? '<div class="flagline bad" style="margin-top:10px">Time ran out before you finished. Unanswered questions were marked wrong.</div>' : '') +
     (a.timeUsedPct < 80 ? '<div class="flagline" style="margin-top:10px">You used only ' + a.timeUsedPct + '% of the allotted time. On the real test, unused time is wasted marks — go back over the items you were unsure about.</div>' : '');
   wrap.appendChild(head);
@@ -4887,6 +5034,15 @@ function showProductiveResult(a) {
   dims.appendChild(dimCard('Task Fulfillment', D.task_fulfillment, 'relevance, completeness, tone'));
   wrap.appendChild(dims);
 
+  if (r._capsApplied && r._capsApplied.length) {
+    const caps = el('div', { class: 'card', style: 'border-color:var(--bad)' });
+    caps.innerHTML = '<h3>Hard caps applied <span class="tag bad">strict marking</span></h3>' +
+      '<p class="small muted">These are enforced in code against measurements of your text, not left to the marker\'s judgement. ' +
+      'Each one held a dimension down regardless of how good the rest of the response was.</p>' +
+      r._capsApplied.map(c => '<div class="flagline bad">' + esc(c) + '</div>').join('');
+    wrap.appendChild(caps);
+  }
+
   const fixes = el('div', { class: 'card' });
   fixes.innerHTML = '<h3>Your top 3 fixes</h3><ol class="clean">' +
     (r.top_3_fixes || []).map(f => '<li>' + esc(f) + '</li>').join('') + '</ol>';
@@ -4950,7 +5106,10 @@ function showProductiveResult(a) {
 
   wrap.appendChild(answerPanels(a, r, isW));
 
-  const row = el('div', { class: 'row' });
+  const row = el('div', { class: 'row noprint' });
+  const bp = el('button', { class: 'btn ghost', text: '🖨 Save as PDF' });
+  bp.onclick = () => window.print();
+  row.appendChild(bp);
   const b1 = el('button', { class: 'btn', text: 'Back to dashboard' });
   b1.onclick = () => go('dashboard');
   const b2 = el('button', { class: 'btn ghost', text: 'Practise this task type again' });
@@ -5092,26 +5251,40 @@ const Speaking = {
     this.intro();
   },
 
+  /* The real Speaking test runs about 20 minutes for 8 tasks whose prep and
+     response time totals roughly 16. The difference is the instruction screen
+     before each task, which advances on its own. Reproducing it matters: it is
+     the only rest you get, and candidates who have never sat the full sequence
+     underestimate how tiring eight unbroken tasks are. */
   intro() {
     const s = this.s;
     const item = s.items[s.idx];
     const spec = SPEAKING_SPEC[item.task];
+    const INSTRUCTION_SECS = 20;
     const wrap = el('div');
     wrap.appendChild(examChrome('Speaking — Task ' + item.task + (spec.scored ? '' : ' (not scored)') + ': ' + spec.name,
       'Task ' + (s.idx + 1) + ' of ' + s.items.length + '  ·  ' + spec.prep + 's preparation, ' + spec.resp + 's response', null));
     const body = el('div', { class: 'wrap' });
     wrap.appendChild(body);
     const c = el('div', { class: 'card center' });
-    c.innerHTML = '<h2>Task ' + item.task + ' — ' + esc(spec.name) + '</h2>' +
+    c.innerHTML = '<div class="tag">INSTRUCTIONS</div>' +
+      '<h2>Task ' + item.task + ' — ' + esc(spec.name) + '</h2>' +
       '<p class="muted">You will get <strong>' + spec.prep + ' seconds</strong> to prepare' +
       (spec.choose ? ' (after ' + spec.choose + ' seconds to choose an option)' : '') +
       ', then recording starts <strong>automatically</strong> for <strong>' + spec.resp + ' seconds</strong>.</p>' +
-      '<div class="flagline">There is no pause, no re-record and no skip — exactly like the real test. Speak until the timer stops you.</div>';
-    const b = el('button', { class: 'btn lg', text: 'Begin Task ' + item.task });
-    b.onclick = () => (spec.choose ? this.choosePhase() : this.prepPhase());
+      '<div class="flagline">There is no pause, no re-record and no skip — exactly like the real test. Speak until the timer stops you.</div>' +
+      '<div class="bigtimer" id="bt" aria-live="polite">' + INSTRUCTION_SECS + '</div>' +
+      '<p class="tiny muted">This advances on its own, as it does on test day.</p>';
+    const b = el('button', { class: 'btn', text: 'Skip ahead' });
+    const go2 = () => { if (s.phaseTimer) s.phaseTimer.stop(); (spec.choose ? this.choosePhase() : this.prepPhase()); };
+    b.onclick = go2;
     c.appendChild(b);
     body.appendChild(c);
     setScreen(wrap);
+    const t = new Timer(INSTRUCTION_SECS, null, go2);
+    t.onTick = left => { const n = $('#bt'); if (n) n.textContent = Math.ceil(left); };
+    t.start();
+    s.phaseTimer = t;
   },
 
   promptBody(item) {
@@ -5412,6 +5585,101 @@ function lineChart(series, opts) {
   return box;
 }
 
+/* ---------------- 50.2b STUDY PLAN ----------------
+   No model needed. Everything here is already recorded; it was simply never
+   turned into an instruction. Ordered by what costs the most marks. */
+function buildStudyPlan(attempts, errors) {
+  const plan = [];
+
+  // 1. weakest Listening/Reading part, pooled
+  const pooled = {};
+  attempts.forEach(a => {
+    if (a.module !== 'listening' && a.module !== 'reading') return;
+    (a.perPart || []).forEach(p => {
+      const k = a.module + ':' + p.part;
+      if (!pooled[k]) pooled[k] = { module: a.module, part: p.part, name: p.name, correct: 0, total: 0 };
+      pooled[k].correct += p.correct; pooled[k].total += p.total;
+    });
+  });
+  const weakest = Object.values(pooled).filter(p => p.total >= 5)
+    .sort((a, b) => (a.correct / a.total) - (b.correct / b.total))[0];
+  if (weakest && weakest.correct / weakest.total < 0.8) {
+    plan.push({
+      what: 'Drill ' + weakest.module[0].toUpperCase() + weakest.module.slice(1) + ' Part ' + weakest.part + ' — ' + weakest.name,
+      why: 'Your weakest part at ' + Math.round(100 * weakest.correct / weakest.total) + '% across ' + weakest.total + ' questions.',
+      action: () => (weakest.module === 'listening'
+        ? Listening.start({ mode: 'drill', parts: [weakest.part] })
+        : Reading.start({ mode: 'drill', parts: [weakest.part] }))
+    });
+  }
+
+  // 2. never attempted
+  const done = new Set();
+  attempts.forEach(a => {
+    if (a.module === 'writing' || a.module === 'speaking') done.add(a.module + ':' + a.task);
+    else (a.perPart || []).forEach(p => done.add(a.module + ':' + p.part));
+  });
+  const missing = [];
+  [1, 2, 3, 4, 5, 6].forEach(p => { if (!done.has('listening:' + p)) missing.push({ m: 'listening', t: p, n: LISTENING_SPEC[p].name }); });
+  [1, 2, 3, 4].forEach(p => { if (!done.has('reading:' + p)) missing.push({ m: 'reading', t: p, n: READING_SPEC[p].name }); });
+  [1, 2].forEach(t => { if (!done.has('writing:' + t)) missing.push({ m: 'writing', t, n: t === 1 ? 'Email' : 'Survey' }); });
+  [1, 2, 3, 4, 5, 6, 7, 8].forEach(t => { if (!done.has('speaking:' + t)) missing.push({ m: 'speaking', t, n: SPEAKING_SPEC[t].name }); });
+  if (missing.length) {
+    const x = missing[0];
+    plan.push({
+      what: 'Try ' + x.m[0].toUpperCase() + x.m.slice(1) + ' ' + (x.m === 'writing' || x.m === 'speaking' ? 'Task ' : 'Part ') + x.t + ' — ' + x.n,
+      why: missing.length + ' task type' + (missing.length === 1 ? '' : 's') + ' still untried. An untried task is an unknown risk on test day.',
+      action: () => ({
+        listening: () => Listening.start({ mode: 'drill', parts: [x.t] }),
+        reading: () => Reading.start({ mode: 'drill', parts: [x.t] }),
+        writing: () => Writing.start({ mode: 'drill', tasks: [x.t] }),
+        speaking: () => Speaking.start({ mode: 'drill', tasks: [x.t] })
+      }[x.m]())
+    });
+  }
+
+  // 3. the error that keeps coming back
+  const top = errors.filter(e => e.count >= 2)[0];
+  if (top) {
+    plan.push({
+      what: 'Fix "' + top.mine + '" → "' + top.correct + '"',
+      why: top.type + ', seen ' + top.count + ' times. Write five sentences using the correct form before your next Writing task.',
+      action: () => go('errors')
+    });
+  }
+
+  // 4. time discipline
+  const timed = attempts.filter(a => typeof a.timeUsedPct === 'number');
+  const avg = timed.length ? timed.reduce((s, a) => s + a.timeUsedPct, 0) / timed.length : 100;
+  if (timed.length >= 2 && avg < 85) {
+    plan.push({
+      what: 'Use the whole clock',
+      why: 'You average ' + Math.round(avg) + '% of the allotted time. The unused minutes are free marks — reread instead of submitting.',
+      action: null
+    });
+  }
+
+  // 5. template habit
+  const prod = attempts.filter(a => a.analysis && a.analysis.templates);
+  const tplAvg = prod.length ? prod.reduce((s, a) => s + a.analysis.templates.total, 0) / prod.length : 0;
+  if (prod.length >= 2 && tplAvg >= 1) {
+    plan.push({
+      what: 'Cut the memorised openers',
+      why: 'You average ' + tplAvg.toFixed(1) + ' template phrases per response. At 1.0 density or higher, Vocabulary is capped at CLB 7 automatically.',
+      action: () => Writing.start({ mode: 'drill', tasks: [1] })
+    });
+  }
+
+  if (!plan.length) {
+    plan.push({
+      what: 'Sit a full section under real timing',
+      why: 'Nothing is flagged yet. A full timed section is the fastest way to produce something worth analysing.',
+      action: () => go('section')
+    });
+  }
+  return plan.slice(0, 5);
+}
+
 /* ---------------- 50.3 DASHBOARD ---------------- */
 function attemptCLB(a) {
   if (a.module === 'listening' || a.module === 'reading') {
@@ -5462,6 +5730,58 @@ function renderDashboard() {
   trend.innerHTML = '<h3>CLB trend by module</h3><p class="tiny muted">Oldest attempt on the left. Listening and Reading appear only for full 38-question sections.</p>';
   trend.appendChild(lineChart(series, { w: 900, h: 220 }));
   wrap.appendChild(trend);
+
+  // ---- study plan, derived from what the app already knows ----
+  const plan = buildStudyPlan(attempts, errors);
+  const pc = el('div', { class: 'card' });
+  pc.innerHTML = '<h3>What to do next</h3><p class="tiny muted">Generated from your own results — ' +
+    'weakest parts first, then what you have avoided, then the errors that keep coming back.</p>';
+  const planBox = el('div', { class: 'plan' });
+  plan.forEach((p, i) => {
+    const row = el('div', { class: 'planrow' });
+    row.appendChild(el('div', { class: 'rank', text: String(i + 1) }));
+    const mid = el('div');
+    mid.innerHTML = '<strong>' + esc(p.what) + '</strong><div class="why">' + esc(p.why) + '</div>';
+    row.appendChild(mid);
+    if (p.action) {
+      const b = el('button', { class: 'btn sm', text: 'Start' });
+      b.onclick = p.action;
+      row.appendChild(b);
+    } else row.appendChild(el('span'));
+    planBox.appendChild(row);
+  });
+  pc.appendChild(planBox);
+  wrap.appendChild(pc);
+
+  // ---- accuracy by part, pooled across every attempt ----
+  const pooled = {};
+  attempts.forEach(a => {
+    if (a.module !== 'listening' && a.module !== 'reading') return;
+    (a.perPart || []).forEach(p => {
+      const k = a.module + ':' + p.part;
+      if (!pooled[k]) pooled[k] = { module: a.module, part: p.part, name: p.name, correct: 0, total: 0 };
+      pooled[k].correct += p.correct; pooled[k].total += p.total;
+    });
+  });
+  const pooledArr = Object.values(pooled).filter(p => p.total).sort((a, b) => (a.correct / a.total) - (b.correct / b.total));
+  if (pooledArr.length) {
+    const ac = el('div', { class: 'card' });
+    ac.innerHTML = '<h3>Accuracy by part, all attempts pooled</h3><p class="tiny muted">Weakest first. One bad section is noise; a part that stays low across attempts is a gap.</p>';
+    const t = el('table');
+    t.innerHTML = '<thead><tr><th>Module &amp; part</th><th>Correct</th><th>Rate</th><th>Attempts</th></tr></thead>';
+    const tb = el('tbody');
+    pooledArr.forEach(p => {
+      const rate = Math.round(100 * p.correct / p.total);
+      const tr = el('tr');
+      tr.innerHTML = '<td>' + esc(p.module[0].toUpperCase() + p.module.slice(1)) + ' P' + p.part + ' — ' + esc(p.name) + '</td>' +
+        '<td class="mono">' + p.correct + ' / ' + p.total + '</td>' +
+        '<td><span class="tag ' + (rate >= 80 ? 'ok' : rate >= 65 ? 'warn' : 'bad') + '">' + rate + '%</span></td>' +
+        '<td class="mono">' + Math.max(1, Math.round(p.total / (LISTENING_SPEC[p.part] && p.module === 'listening' ? LISTENING_SPEC[p.part].q : (READING_SPEC[p.part] ? READING_SPEC[p.part].q : p.total)))) + '</td>';
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); ac.appendChild(t);
+    wrap.appendChild(ac);
+  }
 
   // ---- repeat offenders ----
   const ro = el('div', { class: 'card' });

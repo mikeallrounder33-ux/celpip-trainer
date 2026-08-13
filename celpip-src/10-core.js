@@ -89,14 +89,19 @@ const DB = {
 const MEM = { audio: {}, genCache: {}, sessionSeen: new Set() };
 
 /* ---------- 10.4 CLB estimate from raw L/R score (out of 38) ---------- */
+/* The official scale runs M (minimal), then 1 to 12. Our raw-score mapping cannot
+   distinguish 10 from 12 — a perfect raw score is consistent with any of them — so
+   the top band is reported as a range rather than invented precision. */
 function clbFromRaw(raw) {
-  if (raw >= 36) return { clb: 10, label: 'CLB 10+' };
+  if (raw >= 36) return { clb: 10, label: 'CLB 10–12' };
   if (raw >= 33) return { clb: 9, label: 'CLB 9' };
   if (raw >= 29) return { clb: 8, label: 'CLB 8' };
   if (raw >= 25) return { clb: 7, label: 'CLB 7' };
   if (raw >= 21) return { clb: 6, label: 'CLB 6' };
   if (raw >= 17) return { clb: 5, label: 'CLB 5' };
-  return { clb: 4, label: 'CLB 4 or below' };
+  if (raw >= 13) return { clb: 4, label: 'CLB 4' };
+  if (raw >= 9) return { clb: 3, label: 'CLB 3' };
+  return { clb: 2, label: 'CLB M–2 (minimal)' };
 }
 
 /* Lowest-anchored blend: never a generous average.

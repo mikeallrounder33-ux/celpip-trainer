@@ -345,6 +345,15 @@ function showProductiveResult(a) {
   dims.appendChild(dimCard('Task Fulfillment', D.task_fulfillment, 'relevance, completeness, tone'));
   wrap.appendChild(dims);
 
+  if (r._capsApplied && r._capsApplied.length) {
+    const caps = el('div', { class: 'card', style: 'border-color:var(--bad)' });
+    caps.innerHTML = '<h3>Hard caps applied <span class="tag bad">strict marking</span></h3>' +
+      '<p class="small muted">These are enforced in code against measurements of your text, not left to the marker\'s judgement. ' +
+      'Each one held a dimension down regardless of how good the rest of the response was.</p>' +
+      r._capsApplied.map(c => '<div class="flagline bad">' + esc(c) + '</div>').join('');
+    wrap.appendChild(caps);
+  }
+
   const fixes = el('div', { class: 'card' });
   fixes.innerHTML = '<h3>Your top 3 fixes</h3><ol class="clean">' +
     (r.top_3_fixes || []).map(f => '<li>' + esc(f) + '</li>').join('') + '</ol>';
@@ -408,7 +417,10 @@ function showProductiveResult(a) {
 
   wrap.appendChild(answerPanels(a, r, isW));
 
-  const row = el('div', { class: 'row' });
+  const row = el('div', { class: 'row noprint' });
+  const bp = el('button', { class: 'btn ghost', text: '🖨 Save as PDF' });
+  bp.onclick = () => window.print();
+  row.appendChild(bp);
   const b1 = el('button', { class: 'btn', text: 'Back to dashboard' });
   b1.onclick = () => go('dashboard');
   const b2 = el('button', { class: 'btn ghost', text: 'Practise this task type again' });

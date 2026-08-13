@@ -16,7 +16,7 @@ function examChrome(title, subtitle, timer) {
   bar.innerHTML =
     '<div><div style="font-weight:700">' + esc(title) + '</div><div class="tiny muted">' + esc(subtitle || '') + '</div></div>' +
     '<div style="flex:1"><div class="bar"><i style="width:100%"></i></div></div>' +
-    '<div class="clock">--:--</div>';
+    '<div class="clock" role="timer" aria-live="off" aria-atomic="true">--:--</div>';
   if (timer) bindClock(bar, timer);
   return bar;
 }
@@ -49,7 +49,19 @@ const Listening = {
     }
     if (!items.length) { APP.examMode = false; go('dashboard'); return; }
 
-    const qTotal = items.reduce((a, i) => a + i.blocks.reduce((x, b) => x + b.questions.length, 0), 0);
+    // The real test embeds unscored trial items you cannot identify. Practising
+    // without them fails to train the "strange question, don't panic" reflex.
+    if (cfg.mode !== 'drill') {
+      const tp = pick([2, 3, 4, 6]);
+      const extra = await getItem('listening', tp);
+      if (extra.item) {
+        extra.item._source = extra.source;
+        extra.item._trial = true;
+        items.splice(1 + Math.floor(Math.random() * (items.length - 1)), 0, extra.item);
+      }
+    }
+
+    const qTotal = items.filter(i => !i._trial).reduce((a, i) => a + i.blocks.reduce((x, b) => x + b.questions.length, 0), 0);
     const allotted = cfg.mode === 'drill' ? partAllotment('listening', qTotal) : MODULE_TIME.listening;
 
     this.s = {
@@ -70,8 +82,7 @@ const Listening = {
     wrap.appendChild(examChrome(
       'Listening — Part ' + item.part + ': ' + spec.name,
       'Passage ' + (s.idx + 1) + ' of ' + s.items.length +
-      (item.blocks.length > 1 ? '  ·  Section ' + (s.blockIdx + 1) + ' of ' + item.blocks.length : '') +
-      '  ·  target CLB ' + (item.clb || '?') + '  ·  ' + (item._source === 'api' ? 'generated' : 'offline bank'),
+      (item.blocks.length > 1 ? '  ·  Section ' + (s.blockIdx + 1) + ' of ' + item.blocks.length : ''),
       s.timer));
     const body = el('div', { class: 'wrap' });
     wrap.appendChild(body);
@@ -193,12 +204,14 @@ const Listening = {
     s.timer.stop();
     if (s.speaking) s.speaking.cancel();
     APP.examMode = false;
-    const raw = s.answers.filter(a => a.ok).length;
+    const trialIds = new Set(s.items.filter(i => i._trial).map(i => i.id));
+    const scored = s.answers.filter(a => !trialIds.has(a.itemId));
+    const raw = scored.filter(a => a.ok).length;
     const usedPct = Math.round(s.timer.usedPct());
     const perPart = {};
-    s.items.forEach(it => { perPart[it.part] = { part: it.part, name: LISTENING_SPEC[it.part].name, correct: 0, total: 0 }; });
-    s.answers.forEach(a => { if (perPart[a.part]) { perPart[a.part].total++; if (a.ok) perPart[a.part].correct++; } });
-    s.items.forEach(it => {
+    s.items.filter(i => !i._trial).forEach(it => { perPart[it.part] = { part: it.part, name: LISTENING_SPEC[it.part].name, correct: 0, total: 0 }; });
+    scored.forEach(a => { if (perPart[a.part]) { perPart[a.part].total++; if (a.ok) perPart[a.part].correct++; } });
+    s.items.filter(i => !i._trial).forEach(it => {
       const q = it.blocks.reduce((x, b) => x + b.questions.length, 0);
       if (perPart[it.part]) perPart[it.part].total = q;
     });
@@ -208,6 +221,7 @@ const Listening = {
       raw, total: s.qTotal, isFullSection: full,
       clb: full ? clbFromRaw(raw).label : null,
       perPart: Object.values(perPart),
+      trialCount: s.items.filter(i => i._trial).reduce((a, i) => a + i.blocks.reduce((x, b) => x + b.questions.length, 0), 0),
       answers: s.answers, items: s.items, timeUsedPct: usedPct,
       allottedSec: s.allotted, usedSec: Math.round(s.timer.usedSec()), timedOut: !!timedOut
     };
@@ -303,7 +317,16 @@ const Reading = {
     }
     if (!items.length) { APP.examMode = false; go('dashboard'); return; }
 
-    const qTotal = items.reduce((a, i) => a + readingQCount(i), 0);
+    if (cfg.mode !== 'drill') {
+      const extra = await getItem('reading', pick([1, 2, 3, 4]));
+      if (extra.item) {
+        extra.item._source = extra.source;
+        extra.item._trial = true;
+        items.splice(1 + Math.floor(Math.random() * (items.length - 1)), 0, extra.item);
+      }
+    }
+
+    const qTotal = items.filter(i => !i._trial).reduce((a, i) => a + readingQCount(i), 0);
     const allotted = cfg.mode === 'drill' ? partAllotment('reading', qTotal) : MODULE_TIME.reading;
     this.s = { cfg, items, qTotal, allotted, idx: 0, answers: {}, timer: new Timer(allotted, null, () => this.finish(true)) };
     this.s.timer.start();
@@ -322,8 +345,7 @@ const Reading = {
     const A = this.ans(item);
     const wrap = el('div');
     wrap.appendChild(examChrome('Reading — Part ' + item.part + ': ' + spec.name,
-      'Passage ' + (s.idx + 1) + ' of ' + s.items.length + '  ·  target CLB ' + (item.clb || '?') + '  ·  ' + (item._source === 'api' ? 'generated' : 'offline bank'),
-      s.timer));
+      'Passage ' + (s.idx + 1) + ' of ' + s.items.length, s.timer));
     const body = el('div', { class: 'wrap wide' });
     wrap.appendChild(body);
 
@@ -453,6 +475,7 @@ const Reading = {
       if (it.mc) it.mc.forEach((q, i) => { t++; const ok = A.mc[i] === q.a; if (ok) c++; detail.push({ itemId: it.id, part: it.part, kind: 'mc', i, chosen: A.mc[i], correct: q.a, ok }); });
       if (it.blanks) it.blanks.forEach((b, i) => { t++; const ok = A.blanks[i] === b.a; if (ok) c++; detail.push({ itemId: it.id, part: it.part, kind: 'blank', i, chosen: A.blanks[i], correct: b.a, ok }); });
       if (it.statements) it.statements.forEach((st, i) => { t++; const ok = A.statements[i] === st.a; if (ok) c++; detail.push({ itemId: it.id, part: it.part, kind: 'stmt', i, chosen: A.statements[i], correct: st.a, ok }); });
+      if (it._trial) return;                       // trial passage: answered, never scored
       raw += c; total += t;
       perPart.push({ part: it.part, name: READING_SPEC[it.part].name, correct: c, total: t });
     });
@@ -460,7 +483,8 @@ const Reading = {
     const attempt = {
       id: uid(), ts: Date.now(), module: 'reading', mode: s.cfg.mode,
       raw, total, isFullSection: full, clb: full ? clbFromRaw(raw).label : null,
-      perPart, answers: detail, rawAnswers: s.answers, items: s.items,
+      perPart, trialCount: s.items.filter(i => i._trial).reduce((a, i) => a + readingQCount(i), 0),
+      answers: detail, rawAnswers: s.answers, items: s.items,
       timeUsedPct: Math.round(s.timer.usedPct()), allottedSec: s.allotted,
       usedSec: Math.round(s.timer.usedSec()), timedOut: !!timedOut
     };
@@ -491,6 +515,9 @@ function showLRResult(a) {
     (est
       ? '<p class="tiny muted" style="margin-top:12px">This is an <strong>estimate only</strong>, mapped from your raw score out of 38. It is not an official CELPIP result and the real conversion varies by test form.</p>'
       : '<p class="tiny muted" style="margin-top:12px">A CLB estimate is only shown for a full 38-question section. This was a ' + a.total + '-question drill (' + pct + '% correct).</p>') +
+    (a.trialCount ? '<div class="flagline" style="margin-top:10px">This section contained <strong>' + a.trialCount +
+      ' unscored trial questions</strong>, mixed in where you could not identify them — exactly as the real test does. ' +
+      'They are excluded from the score above. If a passage felt strange, that may be why.</div>' : '') +
     (a.timedOut ? '<div class="flagline bad" style="margin-top:10px">Time ran out before you finished. Unanswered questions were marked wrong.</div>' : '') +
     (a.timeUsedPct < 80 ? '<div class="flagline" style="margin-top:10px">You used only ' + a.timeUsedPct + '% of the allotted time. On the real test, unused time is wasted marks — go back over the items you were unsure about.</div>' : '');
   wrap.appendChild(head);
