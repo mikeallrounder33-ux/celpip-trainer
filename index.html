@@ -3,298 +3,179 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CELPIP-General Trainer — free practice that marks you honestly</title>
-<meta name="description" content="Free CELPIP-General practice. Listening and Reading marked out of 38, Writing and Speaking scored on all four official dimensions with hard caps enforced in code. Exam-accurate timers, unscored trial questions, recurring-error tracking. No account, no cost, nothing collected.">
-<meta name="theme-color" content="#123c8e">
+<title>CELPIP-General Trainer — free timed practice with honest marking</title>
+<meta name="description" content="Free CELPIP-General practice for all four modules. Exam-accurate timers, Listening and Reading marked out of 38, Writing and Speaking scored on the four official dimensions. No account, no cost, nothing collected.">
+<meta name="theme-color" content="#1b56c4">
 <link rel="canonical" href="https://mikeallrounder33-ux.github.io/celpip-trainer/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="CELPIP-General Trainer">
-<meta property="og:title" content="CELPIP-General Trainer — free practice that marks you honestly">
-<meta property="og:description" content="Timed practice for all four modules, marked strictly in your browser. No account, no cost, nothing collected.">
+<meta property="og:title" content="CELPIP-General Trainer — free timed practice">
+<meta property="og:description" content="Timed practice for all four CELPIP-General modules, marked in your browser. No account, no cost.">
 <meta property="og:url" content="https://mikeallrounder33-ux.github.io/celpip-trainer/">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="CELPIP-General Trainer — free practice that marks you honestly">
-<meta name="twitter:description" content="Timed practice for all four modules, marked strictly in your browser. No account, no cost.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%23123c8e'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='36' font-weight='700' fill='white' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
+<meta name="twitter:title" content="CELPIP-General Trainer — free timed practice">
+<meta name="twitter:description" content="Timed practice for all four CELPIP-General modules, marked in your browser. No account, no cost.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%231b56c4'/%3E%3Ctext x='32' y='45' font-family='-apple-system,Segoe UI,Helvetica,Arial,sans-serif' font-size='34' font-weight='700' fill='white' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
 <style>
+/* Same tokens as the app, so the landing page and the tool are one product. */
 :root{
-  --paper:#f4f5f2; --surface:#fff; --ink:#14181a; --ink-2:#485357; --ink-3:#78858a;
-  --rule:#dee2dd; --rule-2:#ebeee9;
-  --navy:#123c8e; --navy-2:#1b56c4; --navy-soft:#e8eef9;
-  --ok:#0f6f50; --ok-soft:#e5f0eb; --warn:#8f5500; --warn-soft:#f7efdf; --bad:#a5312a; --bad-soft:#f8e8e6;
+  --bg:#f5f6f8; --panel:#ffffff; --ink:#15181d; --muted:#525b68; --line:#dfe3e9;
+  --brand:#1b56c4; --brand-dk:#123c8e; --ok:#0f6f50; --warn:#8f5500;
+  --soft:#eef3fd; --radius:10px;
+  --shadow:0 1px 3px rgba(20,25,35,.09),0 6px 18px rgba(20,25,35,.05);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --paper:#111416; --surface:#191d20; --ink:#e8ebe8; --ink-2:#a6b0b3; --ink-3:#7a868a;
-  --rule:#2b3135; --rule-2:#212629;
-  --navy:#8fb6f0; --navy-2:#a8c8f7; --navy-soft:#18243a;
-  --ok:#7cc79c; --ok-soft:#17281f; --warn:#dcb460; --warn-soft:#2a2415; --bad:#e5928a; --bad-soft:#2d1c1a;
+  --bg:#14171b; --panel:#1c2027; --ink:#e9ecf1; --muted:#a3adba; --line:#2c323b;
+  --brand:#7ba6f0; --brand-dk:#9dbdf7; --ok:#6cc39a; --warn:#d9ad60;
+  --soft:#1d2735; --shadow:0 1px 3px rgba(0,0,0,.35),0 6px 18px rgba(0,0,0,.25);
 }}
 :root[data-theme="dark"]{
-  --paper:#111416; --surface:#191d20; --ink:#e8ebe8; --ink-2:#a6b0b3; --ink-3:#7a868a;
-  --rule:#2b3135; --rule-2:#212629;
-  --navy:#8fb6f0; --navy-2:#a8c8f7; --navy-soft:#18243a;
-  --ok:#7cc79c; --ok-soft:#17281f; --warn:#dcb460; --warn-soft:#2a2415; --bad:#e5928a; --bad-soft:#2d1c1a;
+  --bg:#14171b; --panel:#1c2027; --ink:#e9ecf1; --muted:#a3adba; --line:#2c323b;
+  --brand:#7ba6f0; --brand-dk:#9dbdf7; --ok:#6cc39a; --warn:#d9ad60;
+  --soft:#1d2735; --shadow:0 1px 3px rgba(0,0,0,.35),0 6px 18px rgba(0,0,0,.25);
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--paper);color:var(--ink);
-  font:16.5px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-h1,h2,h3{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:600;margin:0;text-wrap:balance}
-h1{font-size:clamp(33px,5.4vw,54px);line-height:1.08;letter-spacing:-.022em}
-h2{font-size:clamp(23px,3vw,31px);line-height:1.18;letter-spacing:-.012em}
-h3{font-size:17.5px;line-height:1.3}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;font-weight:650;line-height:1.2;text-wrap:balance}
+h1{font-size:clamp(29px,4.6vw,42px);letter-spacing:-.02em}
+h2{font-size:21px}
+h3{font-size:16px}
 p{margin:0}
-a{color:var(--navy)}
-.wrap{max-width:1000px;margin:0 auto;padding:0 22px}
-.eyebrow{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+a{color:var(--brand)}
+.wrap{max-width:940px;margin:0 auto;padding:0 20px}
 
-header{border-bottom:1px solid var(--rule);background:var(--surface);position:sticky;top:0;z-index:10}
-header .wrap{display:flex;align-items:center;justify-content:space-between;padding-top:13px;padding-bottom:13px;gap:16px}
-.logo{font-family:Georgia,serif;font-weight:700;font-size:18px;letter-spacing:-.01em}
-.logo span{color:var(--navy)}
-.hbtn{background:var(--navy);color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:9px 18px;border-radius:7px;white-space:nowrap}
-.hbtn:hover{background:var(--navy-2)}
+header{background:var(--panel);border-bottom:1px solid var(--line)}
+header .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:12px;padding-bottom:12px}
+.logo{font-weight:750;font-size:16px;letter-spacing:-.02em}
+.logo span{color:var(--brand)}
+.btn{background:var(--brand);color:#fff;text-decoration:none;font-weight:600;font-size:14px;
+  padding:9px 17px;border-radius:8px;white-space:nowrap;display:inline-block}
+.btn:hover{background:var(--brand-dk)}
+.btn.lg{font-size:16px;padding:14px 30px;border-radius:9px}
 
-.hero{padding:74px 0 20px;display:flex;flex-direction:column;gap:22px;align-items:flex-start}
-.hero h1{max-width:17ch}
-.hero .lead{font-size:20px;color:var(--ink-2);max-width:56ch}
-.cta-row{display:flex;gap:13px;flex-wrap:wrap;align-items:center;margin-top:4px}
-.cta{background:var(--navy);color:#fff;text-decoration:none;font-weight:650;font-size:17px;padding:15px 32px;border-radius:9px;display:inline-block}
-.cta:hover{background:var(--navy-2)}
-.cta-note{font-size:14px;color:var(--ink-3)}
+.hero{padding:66px 0 46px;display:flex;flex-direction:column;gap:18px;align-items:flex-start}
+.hero .lead{font-size:18.5px;color:var(--muted);max-width:56ch}
+.hero .sub{font-size:14px;color:var(--muted)}
+.cta-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:6px}
 
-.ticker{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--surface);margin:34px 0 0}
-.ticker div{flex:1 1 150px;padding:16px 18px;border-right:1px solid var(--rule)}
-.ticker div:last-child{border-right:0}
-.ticker .v{font-family:Georgia,serif;font-size:25px;line-height:1.1;font-variant-numeric:tabular-nums}
-.ticker .l{font-size:12.5px;color:var(--ink-3);margin-top:4px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(2,1fr)}
+@media(max-width:720px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 20px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:7px}
+.card .k{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:650}
+.card p{font-size:14.5px;color:var(--muted)}
 
-section{padding:64px 0;border-top:1px solid var(--rule)}
-section:first-of-type{border-top:0}
-.sec-lead{max-width:62ch;color:var(--ink-2);margin-top:10px}
+section{padding:0 0 52px}
+.sec-title{margin-bottom:16px}
 
-.grid{display:grid;gap:16px;margin-top:30px}
-.g2{grid-template-columns:repeat(2,1fr)}
-.g3{grid-template-columns:repeat(3,1fr)}
-@media(max-width:800px){.g2,.g3{grid-template-columns:1fr}}
-.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:20px 22px;display:flex;flex-direction:column;gap:9px}
-.card .num{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;letter-spacing:.1em;color:var(--ink-3)}
-.card p{font-size:15px;color:var(--ink-2)}
+.note{border-left:3px solid var(--warn);background:var(--panel);padding:15px 18px;
+  border-radius:0 var(--radius) var(--radius) 0;font-size:14px;color:var(--muted)}
+.note.ok{border-left-color:var(--ok)}
+.note strong{color:var(--ink)}
 
-.strict{background:var(--surface);border:1px solid var(--rule);border-radius:10px;overflow:hidden;margin-top:28px}
-.strict-head{padding:18px 22px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:baseline}
-.strict-row{display:grid;grid-template-columns:1fr auto;gap:14px;padding:13px 22px;border-bottom:1px solid var(--rule-2);align-items:center}
-.strict-row:last-child{border-bottom:0}
-.strict-row .t{font-size:15px}
-.cap{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;letter-spacing:.04em;background:var(--bad-soft);color:var(--bad);padding:4px 9px;border-radius:4px;white-space:nowrap}
-
-.demo{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:0;overflow:hidden;margin-top:28px}
-.demo-head{padding:14px 20px;border-bottom:1px solid var(--rule);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
-.demo-body{display:grid;grid-template-columns:1fr 1fr}
-@media(max-width:760px){.demo-body{grid-template-columns:1fr}}
-.demo-col{padding:20px 22px}
-.demo-col+.demo-col{border-left:1px solid var(--rule)}
-@media(max-width:760px){.demo-col+.demo-col{border-left:0;border-top:1px solid var(--rule)}}
-.claimed{font-family:Georgia,serif;font-size:32px;color:var(--ink-3);text-decoration:line-through}
-.actual{font-family:Georgia,serif;font-size:32px;color:var(--bad)}
-.demo-col ul{margin:12px 0 0;padding-left:18px;font-size:13.5px;color:var(--ink-2);display:flex;flex-direction:column;gap:5px}
-
-table{border-collapse:collapse;width:100%;font-size:15px;min-width:520px}
-.scroll{overflow-x:auto;margin-top:28px}
-th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--rule-2)}
-th{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:500;border-bottom:1px solid var(--rule)}
-tbody tr:last-child td{border-bottom:0}
-tr.us{background:var(--navy-soft)}
-td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
-
-.disc{background:var(--warn-soft);border-left:3px solid var(--warn);border-radius:0 9px 9px 0;padding:17px 21px;font-size:15px;margin-top:30px}
-.priv{background:var(--ok-soft);border-left:3px solid var(--ok);border-radius:0 9px 9px 0;padding:17px 21px;font-size:15px;margin-top:18px}
-
-.final{text-align:center;padding:74px 0}
-.final h2{margin-bottom:14px}
-footer{border-top:1px solid var(--rule);background:var(--surface);padding:26px 0;font-size:13.5px;color:var(--ink-3)}
-footer a{color:var(--ink-2)}
-:focus-visible{outline:3px solid var(--navy);outline-offset:2px;border-radius:4px}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+.final{text-align:center;padding:20px 0 66px;display:flex;flex-direction:column;gap:16px;align-items:center}
+footer{background:var(--panel);border-top:1px solid var(--line);padding:22px 0;font-size:13px;color:var(--muted)}
+footer a{color:var(--muted)}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px;border-radius:4px}
 </style>
 </head>
 <body>
 
 <header><div class="wrap">
   <div class="logo">CELPIP<span>·</span>Trainer</div>
-  <a class="hbtn" href="celpip-trainer.html">Start practising</a>
+  <a class="btn" href="celpip-trainer.html">Start practising</a>
 </div></header>
 
 <div class="wrap">
 
   <div class="hero">
-    <div class="eyebrow">Free · open source · no account</div>
-    <h1>The practice test that marks you honestly.</h1>
-    <p class="lead">Most platforms inflate your score to keep you subscribed. That is why people
-      walk in expecting a 9 and come out with a 7. This one applies the caps in code, so a
-      fluent-but-vague answer cannot quietly pass.</p>
+    <h1>Free CELPIP-General practice, under real exam timing.</h1>
+    <p class="lead">All four modules. Listening and Reading marked out of 38, Writing and Speaking
+      scored on the four official dimensions. Everything runs in your browser.</p>
     <div class="cta-row">
-      <a class="cta" href="celpip-trainer.html">Start practising →</a>
-      <span class="cta-note">Nothing to install. No sign-up. Works offline.</span>
-    </div>
-    <div class="ticker">
-      <div><div class="v">4</div><div class="l">Modules, exam timing</div></div>
-      <div><div class="v">88</div><div class="l">Original items built in</div></div>
-      <div><div class="v">48</div><div class="l">Reference answers</div></div>
-      <div><div class="v">$0</div><div class="l">Forever, no account</div></div>
+      <a class="btn lg" href="celpip-trainer.html">Start practising →</a>
+      <span class="sub">No account. No cost. Nothing to install.</span>
     </div>
   </div>
 
   <section>
-    <div class="eyebrow">Why the marking differs</div>
-    <h2>Ten hard caps, enforced in code</h2>
-    <p class="sec-lead">The rater is asked to apply these. Models are agreeable and often don't —
-      so the same rules run again against measurements of your text. A cap cannot be argued with,
-      and it is shown to you with the reason.</p>
-
-    <div class="demo">
-      <div class="demo-head">Real output — a fluent, well-organised, entirely vague email</div>
-      <div class="demo-body">
-        <div class="demo-col">
-          <div class="eyebrow">What a generous marker returned</div>
-          <div class="claimed">CLB 10</div>
-          <ul>
-            <li>Content 10 · Vocabulary 10</li>
-            <li>Readability 10 · Task 10</li>
-            <li>“Good structure, strong range.”</li>
-          </ul>
-        </div>
-        <div class="demo-col">
-          <div class="eyebrow">What this platform reported</div>
-          <div class="actual">CLB 5</div>
-          <ul>
-            <li>Template density 5.83 per 100 words → Vocabulary capped at 6</li>
-            <li>Recycled framing → Content capped at 7</li>
-            <li>Two required points unaddressed → Task capped at 4</li>
-            <li>No number, date or name anywhere in the response</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
-    <div class="strict">
-      <div class="strict-head">
-        <h3>What triggers a cap</h3>
-        <span class="eyebrow">Lowest applicable cap wins — they are not averaged</span>
-      </div>
-      <div class="strict-row"><div class="t">Memorised scaffolding at 1.0 per 100 words</div><span class="cap">Vocabulary ≤ 7</span></div>
-      <div class="strict-row"><div class="t">Any recurring basic grammar error</div><span class="cap">Readability ≤ 8</span></div>
-      <div class="strict-row"><div class="t">Three or more distinct error types</div><span class="cap">Readability ≤ 6</span></div>
-      <div class="strict-row"><div class="t">One required bullet point unaddressed</div><span class="cap">Task ≤ 6</span></div>
-      <div class="strict-row"><div class="t">No number, date or name anywhere</div><span class="cap">Content ≤ 7</span></div>
-      <div class="strict-row"><div class="t">Fewer than three distinct sentence openings</div><span class="cap">Readability ≤ 7</span></div>
-      <div class="strict-row"><div class="t">Filler words above 8 per 100 spoken words</div><span class="cap">Listenability ≤ 7</span></div>
-      <div class="strict-row"><div class="t">Wrong salutation or tone for the recipient</div><span class="cap">Task ≤ 6</span></div>
-    </div>
-    <p class="sec-lead" style="margin-top:20px">The overall band is then <strong>lowest-anchored</strong>
-      — pulled toward your weakest dimension rather than averaged, because that is how the real
-      scale behaves. Four dimensions of 6, 7, 8 and 6 give you a 6, not a 7.</p>
-  </section>
-
-  <section>
-    <div class="eyebrow">The test itself</div>
-    <h2>Built to the official format, including the parts that are unpleasant</h2>
-    <div class="grid g2">
+    <h2 class="sec-title">What you get</h2>
+    <div class="grid">
       <div class="card">
-        <div class="num">LISTENING · 38 QUESTIONS · 55 MIN</div>
-        <h3>The audio plays once</h3>
-        <p>Six parts. No replay button, no transcript until review, and a different voice and
-          accent for every speaker. You cannot go back to a section you have answered.</p>
+        <div class="k">Listening · 38 questions · 55 min</div>
+        <h3>Audio plays once</h3>
+        <p>Six parts, a different voice per speaker, no replay and no transcript until review.</p>
       </div>
       <div class="card">
-        <div class="num">READING · 38 QUESTIONS · 56 MIN</div>
-        <h3>Four parts, diagrams and all</h3>
-        <p>Correspondence, applying a diagram, information matching and viewpoints. Marked
-          instantly with the correct answers and why each one is right.</p>
+        <div class="k">Reading · 38 questions · 56 min</div>
+        <h3>Four parts, marked instantly</h3>
+        <p>With the correct answers and an explanation for each one.</p>
       </div>
       <div class="card">
-        <div class="num">WRITING · 2 TASKS · 53 MIN</div>
-        <h3>No spellcheck, and a gate before you submit</h3>
-        <p>Autocorrect is off, as on the real test. Submit early and it stops you once. Then a
-          90-second proofread you cannot skip.</p>
+        <div class="k">Writing · 2 tasks · 53 min</div>
+        <h3>No spellcheck, as on the real test</h3>
+        <p>Live word count, and a proofread step before you can submit.</p>
       </div>
       <div class="card">
-        <div class="num">SPEAKING · 8 TASKS · ~20 MIN</div>
-        <h3>Recording starts whether you are ready or not</h3>
-        <p>Preparation and recording advance on their own, with the same instruction screens
-          between tasks. No pause, no re-record, no skipping.</p>
+        <div class="k">Speaking · 8 tasks · ~20 min</div>
+        <h3>Recording starts on its own</h3>
+        <p>No pause, no re-record, no skipping. Your response is transcribed and scored.</p>
       </div>
-    </div>
-    <div class="disc" style="border-left-color:var(--navy);background:var(--navy-soft)">
-      <strong>Unscored trial questions are mixed in.</strong> The real test embeds questions that
-      do not count and you cannot identify. Practising without them means you have never had to
-      hit a strange question and keep your nerve. This is the only practice platform I am aware of
-      that reproduces it.
     </div>
   </section>
 
   <section>
-    <div class="eyebrow">After every answer</div>
-    <h2>Four ways to see the same response</h2>
-    <div class="grid g2">
-      <div class="card"><div class="num">01</div><h3>What you wrote</h3><p>With memorised scaffolding highlighted in place, so you can see the phrases the marker discounts.</p></div>
-      <div class="card"><div class="num">02</div><h3>Your answer, corrected</h3><p>Your own words and structure with every detected error repaired. The difference between this and panel one is your habits.</p></div>
-      <div class="card"><div class="num">03</div><h3>Your ideas, one band higher</h3><p>The same content, restructured and reworded the way a stronger candidate would put it.</p></div>
-      <div class="card"><div class="num">04</div><h3>A reference answer</h3><p>An independent CLB 10–11 answer to the same prompt, written for it in advance. For structure, not for copying.</p></div>
+    <h2 class="sec-title">Marked strictly, on purpose</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Caps you cannot argue with</h3>
+        <p>Memorised phrases, unaddressed bullet points, missing specifics and repeated grammar
+          errors each cap a dimension automatically — so a fluent but empty answer cannot pass.</p>
+      </div>
+      <div class="card">
+        <h3>Your weakest dimension decides</h3>
+        <p>The overall band is pulled toward your lowest score rather than averaged, which is how
+          the real scale behaves.</p>
+      </div>
+      <div class="card">
+        <h3>Four views of every answer</h3>
+        <p>What you wrote, the same thing corrected, your ideas one band higher, and an
+          independent reference answer.</p>
+      </div>
+      <div class="card">
+        <h3>Errors tracked across sessions</h3>
+        <p>The mistake you made three sessions ago is still counted, so habits surface instead of
+          hiding.</p>
+      </div>
     </div>
-    <p class="sec-lead" style="margin-top:24px">Panels 1, 2 and 4 need no AI at all. Every error is
-      also filed in a recurring-error log, so the mistake you made three sessions ago is still
-      counted against you today.</p>
   </section>
 
   <section>
-    <div class="eyebrow">Cost</div>
-    <h2>What everything else charges</h2>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>Option</th><th class="n">Price</th><th>Writing &amp; Speaking feedback</th></tr></thead>
-        <tbody>
-          <tr><td>Official practice bundles</td><td class="n">$35–40</td><td>None at all</td></tr>
-          <tr><td>Subscription prep platforms</td><td class="n">$49/mo – $229</td><td>Behind the paywall</td></tr>
-          <tr><td>Private tutor</td><td class="n">$50–150/hr</td><td>Yes, and genuinely human</td></tr>
-          <tr class="us"><td><strong>This platform</strong></td><td class="n"><strong>$0</strong></td><td><strong>Included, and stricter</strong></td></tr>
-        </tbody>
-      </table>
+    <div class="note ok">
+      <strong>Nothing about you is collected.</strong> No account, no cookies, no analytics, no
+      server. Your history is saved in your own browser and never leaves it — which also means
+      clearing your browser data deletes it, so export a copy from Settings.
     </div>
-    <p class="sec-lead" style="margin-top:22px">Everything works with no key and no internet. For a
-      model rewrite you can run an open-weights model <strong>on your own device</strong> through
-      WebGPU — still no key, still nothing transmitted — or connect Anthropic, OpenAI, Groq,
-      OpenRouter, Ollama or LM Studio if you prefer.</p>
-
-    <div class="priv">
-      <strong>No account, no cookies, no analytics, no server.</strong> Your practice history is
-      written to your own browser and never leaves it. That also means clearing your browser data
-      deletes it, so export a copy from Settings. If you enter an API key it is stored locally and
-      sent only to the provider you chose.
-    </div>
-
-    <div class="disc">
+    <div class="note" style="margin-top:14px">
       <strong>Not affiliated with CELPIP.</strong> CELPIP is a registered trademark of Paragon
-      Testing Enterprises. This is an independent, unofficial practice tool with no connection to
-      or endorsement from any official test administrator. It contains no official test material —
-      every item is original — and the bands it reports are estimates for practice only. They are
-      not official results and are not produced by a certified rater.
+      Testing Enterprises. This is an independent, unofficial practice tool. It contains no
+      official test material, and the bands it reports are estimates for practice only — not
+      official results.
     </div>
   </section>
 
   <div class="final">
     <h2>Find out what you would actually score.</h2>
-    <p class="sec-lead" style="margin:0 auto 22px">A single Reading section takes 56 minutes and
-      tells you more than a week of watching videos.</p>
-    <a class="cta" href="celpip-trainer.html">Start practising →</a>
+    <a class="btn lg" href="celpip-trainer.html">Start practising →</a>
   </div>
 
 </div>
 
 <footer><div class="wrap">
-  Free and open source under the MIT licence ·
-  <a href="https://github.com/mikeallrounder33-ux/celpip-trainer">Source code and issues</a> ·
-  <a href="https://github.com/mikeallrounder33-ux/celpip-trainer/blob/main/NOTICE.md">Notice and disclaimers</a>
+  Free and open source (MIT) ·
+  <a href="https://github.com/mikeallrounder33-ux/celpip-trainer">Source code</a> ·
+  <a href="https://github.com/mikeallrounder33-ux/celpip-trainer/blob/main/NOTICE.md">Notice</a>
 </div></footer>
 
 </body>

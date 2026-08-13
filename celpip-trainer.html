@@ -6240,21 +6240,45 @@ function reviewQ(num, qtext, options, correctIdx, chosenIdx, why) {
 }
 
 /* ---------------- 50.9 SETTINGS ---------------- */
+/* ---------------- 50.9a advanced (owner) settings ----------------
+   Provider and API configuration is hidden from ordinary visitors: a stranger
+   should not be invited to paste an API key into someone else's page, and the
+   options are noise for someone who just wants to practise.
+
+   This is CONCEALMENT, NOT SECURITY. The source is public and anyone who reads
+   it can set the same flag. It keeps the interface clean; it does not protect
+   anything, and nothing sensitive is stored here to protect. */
+function advancedOn() { return DB.get('celpip_advanced', false) === true; }
+function setAdvanced(v) { DB.set('celpip_advanced', !!v); }
+(function checkAdvancedFlag() {
+  try {
+    if (/[?&]advanced=1/.test(location.search) || /^#advanced$/.test(location.hash)) {
+      setAdvanced(true);
+      history.replaceState(null, '', location.pathname);
+    }
+  } catch (e) { }
+})();
+
 function renderSettings() {
   const s = DB.settings();
+  const ADV = advancedOn();
   const wrap = el('div', { class: 'wrap' });
 
   const c = el('div', { class: 'card' });
   c.innerHTML = '<h1>Settings</h1>';
 
-  c.appendChild(el('label', { class: 'fl', text: 'Provider' }));
+  // Everything inside `adv` is owner-only.
+  const adv = el('div');
+  adv.style.display = ADV ? '' : 'none';
+
+  adv.appendChild(el('label', { class: 'fl', text: 'Provider' }));
   const prov = el('select');
   [['browser', 'In-browser model — no key, no account, no cost'],
    ['anthropic', 'Anthropic (Claude) — key required'],
    ['openai', 'OpenAI-compatible (OpenAI, Groq, OpenRouter, local, your proxy)']]
     .forEach(([v, l]) => prov.appendChild(el('option', { value: v, text: l })));
   prov.value = s.provider || 'anthropic';
-  c.appendChild(prov);
+  adv.appendChild(prov);
 
   /* ---- in-browser model panel ---- */
   const bWrap = el('div', { style: 'margin-top:14px' });
@@ -6326,19 +6350,29 @@ function renderSettings() {
     }));
     paintStatus();
   }
+  if (!ADV) {
+    // Public view: the only AI option offered is the one that needs no key and
+    // sends nothing anywhere.
+    prov.value = 'browser';
+    c.appendChild(el('p', {
+      class: 'small muted',
+      html: 'Everything below is optional. The practice tests, the timers and the marking all work with no setup at all.'
+    }));
+  }
   c.appendChild(bWrap);
+  c.appendChild(adv);
 
-  c.appendChild(el('label', { class: 'fl', style: 'margin-top:14px', text: 'API key' }));
+  adv.appendChild(el('label', { class: 'fl', style: 'margin-top:14px', text: 'API key' }));
   const key = el('input', { type: 'password', value: s.apiKey, placeholder: 'sk-…' });
-  c.appendChild(key);
+  adv.appendChild(key);
   const keyNote = el('p', { class: 'tiny muted', style: 'margin-top:6px' });
-  c.appendChild(keyNote);
+  adv.appendChild(keyNote);
 
-  c.appendChild(el('label', { class: 'fl', style: 'margin-top:14px', text: 'Model' }));
+  adv.appendChild(el('label', { class: 'fl', style: 'margin-top:14px', text: 'Model' }));
   const model = el('input', { type: 'text', value: s.model || 'claude-sonnet-4-6' });
-  c.appendChild(model);
+  adv.appendChild(model);
   const modelNote = el('p', { class: 'tiny muted', style: 'margin-top:6px' });
-  c.appendChild(modelNote);
+  adv.appendChild(modelNote);
 
   const baseWrap = el('div');
   baseWrap.appendChild(el('label', { class: 'fl', style: 'margin-top:14px', text: 'Base URL' }));
@@ -6392,7 +6426,7 @@ function renderSettings() {
     class: 'tiny muted', style: 'margin-top:8px',
     html: '<strong>●</strong> = runs entirely on your own machine: no key, no account, no cost, nothing sent anywhere.'
   }));
-  c.appendChild(baseWrap);
+  adv.appendChild(baseWrap);
 
   /* Endpoints that hold the key server-side (your own proxy) need no key here. */
   const nkWrap = el('div');
@@ -6402,7 +6436,7 @@ function renderSettings() {
   nk.appendChild(nki);
   nk.appendChild(el('span', { text: 'This endpoint needs no key from the browser (a local server, or your own proxy that keeps the key server-side)' }));
   nkWrap.appendChild(nk);
-  c.appendChild(nkWrap);
+  adv.appendChild(nkWrap);
 
   const syncProvider = () => {
     const isBrowser = prov.value === 'browser';
@@ -6431,22 +6465,22 @@ function renderSettings() {
   prov.onchange = syncProvider;
   syncProvider();
 
-  c.appendChild(el('label', { class: 'fl', style: 'margin-top:14px', text: 'max_tokens per request' }));
+  adv.appendChild(el('label', { class: 'fl', style: 'margin-top:14px', text: 'max_tokens per request' }));
   const mt = el('input', { type: 'number', value: s.maxTokens || 1000, min: '400', max: '8000' });
-  c.appendChild(mt);
-  c.appendChild(el('p', { class: 'tiny muted', text: '1000 is the specified default. Raise it if generated Part 5 discussions or Part 4 articles come back truncated (the app falls back to the offline bank when that happens).' }));
+  adv.appendChild(mt);
+  adv.appendChild(el('p', { class: 'tiny muted', text: '1000 is the specified default. Raise it if generated Part 5 discussions or Part 4 articles come back truncated (the app falls back to the offline bank when that happens).' }));
 
   const useApi = el('label', { class: 'chk' + (s.useApi !== false ? ' on' : ''), style: 'margin-top:14px' });
   const ua = el('input', { type: 'checkbox' }); ua.checked = s.useApi !== false;
   ua.onchange = () => useApi.classList.toggle('on', ua.checked);
   useApi.appendChild(ua); useApi.appendChild(el('span', { text: 'Use the API to generate fresh items and to mark Writing/Speaking (uncheck to force offline mode for a session)' }));
-  c.appendChild(useApi);
+  adv.appendChild(useApi);
 
   const pa = el('label', { class: 'chk' + (s.persistAudio ? ' on' : '') });
   const pai = el('input', { type: 'checkbox' }); pai.checked = !!s.persistAudio;
   pai.onchange = () => pa.classList.toggle('on', pai.checked);
   pa.appendChild(pai); pa.appendChild(el('span', { text: 'Persist speaking audio in localStorage (short clips only; may hit the browser storage quota)' }));
-  c.appendChild(pa);
+  adv.appendChild(pa);
 
   const save = el('button', { class: 'btn', style: 'margin-top:14px', text: 'Save settings' });
   save.onclick = () => {
@@ -6485,7 +6519,19 @@ function renderSettings() {
     }
     test.disabled = false; test.textContent = 'Test the key';
   };
-  c.appendChild(test);
+  if (ADV) c.appendChild(test);
+
+  if (ADV) {
+    const lock = el('div', { class: 'flagline', style: 'margin-top:16px' });
+    lock.innerHTML = '<strong>Advanced settings are unlocked on this browser.</strong> ' +
+      'Provider and API configuration are hidden from ordinary visitors — this is to keep the ' +
+      'interface clean and to avoid inviting strangers to paste a key into someone else\'s page. ' +
+      'It is not a security control: the source is public, so anyone who reads it can unlock the same view.';
+    const lb = el('button', { class: 'btn ghost sm', style: 'margin-top:8px', text: 'Lock advanced settings' });
+    lb.onclick = () => { setAdvanced(false); toast('Locked. Re-open with ?advanced=1 to unlock.', 'ok'); go('settings'); };
+    lock.appendChild(lb);
+    c.appendChild(lock);
+  }
   wrap.appendChild(c);
 
   // ---- data ----
@@ -6687,7 +6733,7 @@ function renderSettings() {
   };
   dg.appendChild(dgBtn);
   dg.appendChild(dgOut);
-  wrap.appendChild(dg);
+  if (ADV) wrap.appendChild(dg);   // owner-only: noise for a visitor
 
   // ---- voices ----
   const v = el('div', { class: 'card' });
