@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://mikeallrounder33-ux.github.io/celpip-trainer/sitemap.xml

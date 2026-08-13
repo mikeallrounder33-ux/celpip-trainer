@@ -7,7 +7,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CELPIP-General Trainer</title>
+<title>CELPIP-General Trainer — free practice with timed sections and scored feedback</title>
+<meta name="description" content="Free, open-source CELPIP-General practice: full Listening and Reading sections marked automatically, Writing and Speaking scored on all four official dimensions, exam-accurate timers, and a recurring-error log. Runs in your browser. No account, no data collected.">
+<meta name="author" content="CELPIP-General Trainer contributors">
+<meta name="theme-color" content="#1f5fd0">
+<link rel="canonical" href="https://mikeallrounder33-ux.github.io/celpip-trainer/">
+<!-- link previews for WhatsApp, Facebook, X, Slack -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="CELPIP-General Trainer">
+<meta property="og:title" content="CELPIP-General Trainer — free, open-source practice">
+<meta property="og:description" content="Timed practice for all four CELPIP-General modules, marked in your browser. No account, no cost, nothing collected.">
+<meta property="og:url" content="https://mikeallrounder33-ux.github.io/celpip-trainer/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="CELPIP-General Trainer — free, open-source practice">
+<meta name="twitter:description" content="Timed practice for all four CELPIP-General modules, marked in your browser. No account, no cost.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%231f5fd0'/%3E%3Ctext x='32' y='45' font-family='-apple-system,Segoe UI,Helvetica,Arial,sans-serif' font-size='34' font-weight='700' fill='white' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
 <style>
 :root{
   --bg:#f5f6f8; --panel:#ffffff; --ink:#15181d; --muted:#5d6673; --line:#dfe3e9;
@@ -165,6 +179,20 @@ ul.clean li{margin-bottom:4px}
   <div class="tiny muted" id="keystate"></div>
 </div>
 <div id="app"></div>
+<footer style="border-top:1px solid var(--line);background:#fff;padding:16px 18px;margin-top:40px">
+  <div style="max-width:1080px;margin:0 auto" class="tiny muted">
+    <strong>Not affiliated with CELPIP.</strong> CELPIP is a registered trademark of Paragon Testing Enterprises.
+    This is an independent, unofficial practice tool. It contains no official test material — every practice item is
+    original — and the band levels it reports are <strong>estimates for practice only</strong>, not official results.
+    <br>
+    <strong>Your data stays in your browser.</strong> Practice history is saved to this browser's local storage.
+    Nothing is sent to us, and there is no account, no tracking and no analytics. If you enter an API key it is stored
+    locally and sent only to the provider you choose. Use <em>Settings → Export JSON</em> to keep a copy.
+    <br>
+    Free and open source (MIT) —
+    <a href="https://github.com/mikeallrounder33-ux/celpip-trainer">source code and issue tracker</a>.
+  </div>
+</footer>
 <div id="modalroot"></div>
 <script>
 "use strict";

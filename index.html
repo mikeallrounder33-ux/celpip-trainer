@@ -3,16 +3,131 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CELPIP-General Trainer</title>
-<meta http-equiv="refresh" content="0; url=celpip-trainer.html">
-<link rel="canonical" href="celpip-trainer.html">
+<title>CELPIP-General Trainer — free, open-source practice for all four modules</title>
+<meta name="description" content="Free CELPIP-General practice: Listening and Reading marked automatically out of 38, Writing and Speaking scored on all four official dimensions, exam-accurate timers, and a recurring-error log. Runs entirely in your browser. No account, no cost, nothing collected.">
+<meta name="theme-color" content="#1f5fd0">
+<link rel="canonical" href="https://mikeallrounder33-ux.github.io/celpip-trainer/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="CELPIP-General Trainer">
+<meta property="og:title" content="CELPIP-General Trainer — free, open-source practice">
+<meta property="og:description" content="Timed practice for all four CELPIP-General modules, marked in your browser. No account, no cost, nothing collected.">
+<meta property="og:url" content="https://mikeallrounder33-ux.github.io/celpip-trainer/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="CELPIP-General Trainer — free, open-source practice">
+<meta name="twitter:description" content="Timed practice for all four CELPIP-General modules, marked in your browser. No account, no cost.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%231f5fd0'/%3E%3Ctext x='32' y='45' font-family='-apple-system,Segoe UI,Helvetica,Arial,sans-serif' font-size='34' font-weight='700' fill='white' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
 <style>
-  body{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-       margin:0;display:grid;place-items:center;min-height:100vh;background:#f5f6f8;color:#15181d}
-  a{color:#1f5fd0}
+:root{--bg:#f5f6f8;--panel:#fff;--ink:#15181d;--muted:#5d6673;--line:#dfe3e9;--brand:#1f5fd0;--brand-dk:#17439a;--soft:#eef3fd;--ok:#12805c}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--brand)}
+.wrap{max-width:920px;margin:0 auto;padding:0 20px}
+header{background:#fff;border-bottom:1px solid var(--line);padding:12px 0}
+.logo{font-weight:750;letter-spacing:-.02em}.logo span{color:var(--brand)}
+.hero{padding:56px 0 40px;text-align:center}
+h1{font-size:38px;line-height:1.15;margin:0 0 14px;letter-spacing:-.02em}
+.sub{font-size:19px;color:var(--muted);max-width:620px;margin:0 auto 26px}
+.cta{display:inline-block;background:var(--brand);color:#fff;text-decoration:none;font-weight:650;font-size:17px;padding:14px 30px;border-radius:10px}
+.cta:hover{background:var(--brand-dk)}
+.note{font-size:14px;color:var(--muted);margin-top:12px}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(2,1fr);margin:36px 0}
+@media(max-width:720px){.grid{grid-template-columns:1fr}h1{font-size:29px}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px}
+.card h3{margin:0 0 6px;font-size:16px}
+.card p{margin:0;font-size:14.5px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:14.5px;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line)}
+th{font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+h2{font-size:23px;margin:38px 0 12px;letter-spacing:-.01em}
+.disc{background:#fffaf1;border-left:3px solid #b06a00;border-radius:0 8px 8px 0;padding:14px 16px;font-size:14.5px;margin:30px 0}
+footer{border-top:1px solid var(--line);background:#fff;margin-top:44px;padding:22px 0;font-size:13.5px;color:var(--muted)}
+ul{padding-left:20px}li{margin-bottom:5px}
 </style>
 </head>
 <body>
-  <p>Loading the trainer… if nothing happens, <a href="celpip-trainer.html">open it here</a>.</p>
+<header><div class="wrap logo">CELPIP<span>·</span>Trainer</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>Practise CELPIP-General under real exam conditions</h1>
+    <p class="sub">All four modules, exam-accurate timers, marked in your browser.
+       Free, open source, no account, and nothing about you is collected.</p>
+    <a class="cta" href="celpip-trainer.html">Start practising →</a>
+    <p class="note">Opens straight into the app. Nothing to install or sign up for.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Listening — 38 questions, 55 minutes</h3>
+      <p>Six parts. Audio plays <strong>once</strong>, with a different voice and accent per speaker,
+         no replay button, and no transcript until the review screen.</p>
+    </div>
+    <div class="card">
+      <h3>Reading — 38 questions, 56 minutes</h3>
+      <p>Four parts including diagram-matching and gap-fill. Marked instantly with an estimated band,
+         the correct answers, and why each one is right.</p>
+    </div>
+    <div class="card">
+      <h3>Writing — two tasks, 53 minutes</h3>
+      <p>Live word count, spellcheck disabled as on the real test, a forced proofread gate, and a
+         detector for memorised phrases like “I hope this email finds you well”.</p>
+    </div>
+    <div class="card">
+      <h3>Speaking — 8 tasks, ~15 minutes</h3>
+      <p>Preparation and recording start automatically. No pause, no re-record, no skipping.
+         Your speech is transcribed and scored, and you can play your recording back.</p>
+    </div>
+  </div>
+
+  <h2>What you get after every answer</h2>
+  <table>
+    <tr><th>Panel</th><th>What it shows</th></tr>
+    <tr><td><strong>What you wrote</strong></td><td>Your text with memorised scaffolding highlighted</td></tr>
+    <tr><td><strong>Your answer, corrected</strong></td><td>Your own words with every detected error repaired</td></tr>
+    <tr><td><strong>One band higher</strong></td><td>Your ideas, restructured as a stronger candidate would put them</td></tr>
+    <tr><td><strong>Reference answer</strong></td><td>An independent CLB 10–11 answer to the same prompt</td></tr>
+  </table>
+
+  <h2>Built around the things that actually cost marks</h2>
+  <ul>
+    <li><strong>Time-use tracker</strong> — submit with a fifth of your time left and it stops you once and tells you to fix three things.</li>
+    <li><strong>Template detector</strong> — counts memorised scaffolding, penalises the density, and offers natural replacements.</li>
+    <li><strong>Recurring error log</strong> — every mistake is tracked across sessions and the top five surface as “your repeat offenders”.</li>
+    <li><strong>Register checker</strong> — flags a gendered salutation when the recipient’s gender is unknown, contractions in a formal email, and a missing sign-off.</li>
+    <li><strong>Dashboard</strong> — band trend per module, average time used, and which task types you have avoided.</li>
+  </ul>
+
+  <h2>Free, with no key required</h2>
+  <p>Twenty Listening passages, twenty Reading passages, twenty Writing prompts, twenty-eight Speaking
+     prompts and forty-eight reference answers ship inside the page. Listening and Reading mark themselves,
+     and Writing and Speaking are scored, with no model and no internet connection.</p>
+  <p>For a model rewrite and richer feedback, the app can run an open-weights model
+     <strong>on your own device</strong> through WebGPU — no key, no account, and nothing leaves your machine.
+     It also works with Anthropic, OpenAI, Groq, OpenRouter, Ollama or LM Studio if you prefer.</p>
+
+  <div class="disc">
+    <strong>Not affiliated with CELPIP.</strong> CELPIP is a registered trademark of Paragon Testing
+    Enterprises. This is an independent, unofficial practice tool with no connection to or endorsement
+    from any official test administrator. It contains <strong>no official test material</strong> — every
+    practice item is original — and the band levels it reports are <strong>estimates for practice only</strong>.
+    They are not official results, are not produced by a certified rater, and should not be used to
+    predict an official outcome.
+  </div>
+
+  <h2>Your privacy</h2>
+  <p>There is no account, no sign-in, no cookies, no analytics and no server that stores anything.
+     Your practice history is written to your own browser's local storage and never leaves it, which
+     also means clearing your browser data deletes it — use <em>Settings → Export JSON</em> to keep a copy.
+     If you choose to enter an API key it is stored locally in your browser and sent only to the provider
+     you selected. If you use the in-browser model, nothing is transmitted anywhere at all.</p>
+</div>
+
+<footer><div class="wrap">
+  Free and open source under the MIT licence.
+  <a href="https://github.com/mikeallrounder33-ux/celpip-trainer">Source code, issues and contributions</a>
+  · <a href="https://github.com/mikeallrounder33-ux/celpip-trainer/blob/main/NOTICE.md">Notice and disclaimers</a>
+</div></footer>
 </body>
 </html>
