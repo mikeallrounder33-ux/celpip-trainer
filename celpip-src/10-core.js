@@ -141,6 +141,12 @@ function bindClock(node, timer) {
   const bar = node.querySelector('.bar');
   timer.onTick = (left, total) => {
     const c = node.querySelector('.clock');
+    if (timer.untimed) {
+      // Practice mode: show time spent, with no pressure and no expiry.
+      if (c) { c.textContent = fmtTime(total - left); c.classList.remove('low'); }
+      if (bar) { bar.querySelector('i').style.width = '100%'; bar.classList.remove('low'); }
+      return;
+    }
     if (c) { c.textContent = fmtTime(left); c.classList.toggle('low', left < total * 0.1); }
     if (bar) { bar.querySelector('i').style.width = (100 * left / total) + '%'; bar.classList.toggle('low', left < total * 0.1); }
   };

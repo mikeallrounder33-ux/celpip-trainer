@@ -370,6 +370,12 @@ function bindClock(node, timer) {
   const bar = node.querySelector('.bar');
   timer.onTick = (left, total) => {
     const c = node.querySelector('.clock');
+    if (timer.untimed) {
+      // Practice mode: show time spent, with no pressure and no expiry.
+      if (c) { c.textContent = fmtTime(total - left); c.classList.remove('low'); }
+      if (bar) { bar.querySelector('i').style.width = '100%'; bar.classList.remove('low'); }
+      return;
+    }
     if (c) { c.textContent = fmtTime(left); c.classList.toggle('low', left < total * 0.1); }
     if (bar) { bar.querySelector('i').style.width = (100 * left / total) + '%'; bar.classList.toggle('low', left < total * 0.1); }
   };
@@ -4202,13 +4208,14 @@ const Listening = {
     }
 
     const qTotal = items.filter(i => !i._trial).reduce((a, i) => a + i.blocks.reduce((x, b) => x + b.questions.length, 0), 0);
-    const allotted = cfg.mode === 'drill' ? partAllotment('listening', qTotal) : MODULE_TIME.listening;
+    const allotted = cfg.untimed ? 3 * 3600 : (cfg.mode === 'drill' ? partAllotment('listening', qTotal) : MODULE_TIME.listening);
 
     this.s = {
       cfg, items, qTotal, allotted, answers: [], idx: 0, blockIdx: 0,
       phase: 'intro', audioDone: false, speaking: null,
       timer: new Timer(allotted, null, () => this.finish(true))
     };
+    if (cfg.untimed) this.s.timer.untimed = true;
     this.s.timer.start();
     this.render();
   },
@@ -4222,7 +4229,8 @@ const Listening = {
     wrap.appendChild(examChrome(
       'Listening — Part ' + item.part + ': ' + spec.name,
       'Passage ' + (s.idx + 1) + ' of ' + s.items.length +
-      (item.blocks.length > 1 ? '  ·  Section ' + (s.blockIdx + 1) + ' of ' + item.blocks.length : ''),
+      (item.blocks.length > 1 ? '  ·  Section ' + (s.blockIdx + 1) + ' of ' + item.blocks.length : '') +
+      (s.cfg.untimed ? '  ·  Untimed practice' : ''),
       s.timer));
     const body = el('div', { class: 'wrap' });
     wrap.appendChild(body);
@@ -4362,7 +4370,7 @@ const Listening = {
       clb: full ? clbFromRaw(raw).label : null,
       perPart: Object.values(perPart),
       trialCount: s.items.filter(i => i._trial).reduce((a, i) => a + i.blocks.reduce((x, b) => x + b.questions.length, 0), 0),
-      answers: s.answers, items: s.items, timeUsedPct: usedPct,
+      answers: s.answers, items: s.items, timeUsedPct: s.cfg.untimed ? null : usedPct,
       allottedSec: s.allotted, usedSec: Math.round(s.timer.usedSec()), timedOut: !!timedOut
     };
     DB.addAttempt(attempt);
@@ -4467,8 +4475,9 @@ const Reading = {
     }
 
     const qTotal = items.filter(i => !i._trial).reduce((a, i) => a + readingQCount(i), 0);
-    const allotted = cfg.mode === 'drill' ? partAllotment('reading', qTotal) : MODULE_TIME.reading;
+    const allotted = cfg.untimed ? 3 * 3600 : (cfg.mode === 'drill' ? partAllotment('reading', qTotal) : MODULE_TIME.reading);
     this.s = { cfg, items, qTotal, allotted, idx: 0, answers: {}, timer: new Timer(allotted, null, () => this.finish(true)) };
+    if (cfg.untimed) this.s.timer.untimed = true;
     this.s.timer.start();
     this.render();
   },
@@ -4485,7 +4494,7 @@ const Reading = {
     const A = this.ans(item);
     const wrap = el('div');
     wrap.appendChild(examChrome('Reading — Part ' + item.part + ': ' + spec.name,
-      'Passage ' + (s.idx + 1) + ' of ' + s.items.length, s.timer));
+      'Passage ' + (s.idx + 1) + ' of ' + s.items.length + (s.cfg.untimed ? '  ·  Untimed practice' : ''), s.timer));
     const body = el('div', { class: 'wrap wide' });
     wrap.appendChild(body);
 
@@ -4588,7 +4597,7 @@ const Reading = {
   async confirmFinish() {
     const s = this.s;
     const leftPct = 100 - s.timer.usedPct();
-    if (leftPct > 20 && !s.warned) {
+    if (!s.cfg.untimed && leftPct > 20 && !s.warned) {
       s.warned = true;
       await modal({
         title: 'You still have ' + fmtTime(s.timer.left) + ' left',
@@ -4625,7 +4634,7 @@ const Reading = {
       raw, total, isFullSection: full, clb: full ? clbFromRaw(raw).label : null,
       perPart, trialCount: s.items.filter(i => i._trial).reduce((a, i) => a + readingQCount(i), 0),
       answers: detail, rawAnswers: s.answers, items: s.items,
-      timeUsedPct: Math.round(s.timer.usedPct()), allottedSec: s.allotted,
+      timeUsedPct: s.cfg.untimed ? null : Math.round(s.timer.usedPct()), allottedSec: s.allotted,
       usedSec: Math.round(s.timer.usedSec()), timedOut: !!timedOut
     };
     DB.addAttempt(attempt);
@@ -4650,7 +4659,7 @@ function showLRResult(a) {
     '<div class="row" style="gap:26px;align-items:flex-end">' +
     '<div><div class="tiny muted">RAW SCORE</div><div style="font-size:40px;font-weight:750;line-height:1">' + a.raw + '<span class="muted" style="font-size:20px"> / ' + a.total + '</span></div></div>' +
     '<div><div class="tiny muted">ESTIMATED BAND</div><div style="font-size:40px;font-weight:750;line-height:1">' + (est ? esc(est.label) : '—') + '</div></div>' +
-    '<div><div class="tiny muted">TIME USED</div><div style="font-size:40px;font-weight:750;line-height:1">' + a.timeUsedPct + '%</div></div>' +
+    '<div><div class="tiny muted">TIME USED</div><div style="font-size:40px;font-weight:750;line-height:1">' + (a.timeUsedPct == null ? '—' : a.timeUsedPct + '%') + '</div></div>' +
     '</div>' +
     (est
       ? '<p class="tiny muted" style="margin-top:12px">This is an <strong>estimate only</strong>, mapped from your raw score out of 38. It is not an official CELPIP result and the real conversion varies by test form.</p>'
@@ -4659,7 +4668,7 @@ function showLRResult(a) {
       ' unscored trial questions</strong>, mixed in where you could not identify them — exactly as the real test does. ' +
       'They are excluded from the score above. If a passage felt strange, that may be why.</div>' : '') +
     (a.timedOut ? '<div class="flagline bad" style="margin-top:10px">Time ran out before you finished. Unanswered questions were marked wrong.</div>' : '') +
-    (a.timeUsedPct < 80 ? '<div class="flagline" style="margin-top:10px">You used only ' + a.timeUsedPct + '% of the allotted time. On the real test, unused time is wasted marks — go back over the items you were unsure about.</div>' : '');
+    (a.timeUsedPct != null && a.timeUsedPct < 80 ? '<div class="flagline" style="margin-top:10px">You used only ' + a.timeUsedPct + '% of the allotted time. On the real test, unused time is wasted marks — go back over the items you were unsure about.</div>' : '');
   wrap.appendChild(head);
 
   const parts = el('div', { class: 'card' });
@@ -4720,8 +4729,9 @@ const Writing = {
     const item = s.items[s.idx];
     s.text = '';
     s.warned = false;
-    s.allotted = WRITING_TIME[item.task];
+    s.allotted = s.cfg.untimed ? 3 * 3600 : WRITING_TIME[item.task];
     s.timer = new Timer(s.allotted, null, () => this.hardStop());
+    if (s.cfg.untimed) s.timer.untimed = true;
     s.timer.start();
     this.render();
   },
@@ -4732,8 +4742,7 @@ const Writing = {
     const wrap = el('div');
     wrap.appendChild(examChrome(
       'Writing — Task ' + item.task + ': ' + (item.task === 1 ? 'Writing an Email' : 'Responding to Survey Questions'),
-      (item.task === 1 ? '27 minutes' : '26 minutes') + '  ·  150–200 words  ·  target CLB ' + (item.clb || '?') +
-      '  ·  ' + (item._source === 'api' ? 'generated' : 'offline bank'),
+      (s.cfg.untimed ? 'Untimed practice' : (item.task === 1 ? '27 minutes' : '26 minutes')) + '  ·  150–200 words',
       s.timer));
     const body = el('div', { class: 'wrap wide' });
     wrap.appendChild(body);
@@ -4805,7 +4814,7 @@ const Writing = {
   async trySubmit() {
     const s = this.s;
     const leftPct = 100 - s.timer.usedPct();
-    if (leftPct > 20 && !s.warned) {
+    if (!s.cfg.untimed && leftPct > 20 && !s.warned) {
       s.warned = true;
       await modal({
         title: 'You have ' + fmtTime(s.timer.left) + ' left',
@@ -4921,7 +4930,7 @@ const Writing = {
         templates: tp, register: reg, bulletsCovered: res.rating.bullets_covered || res.analysis.bulletsCovered
       },
       clbNum: res.rating.overall_clb, clb: 'CLB ' + res.rating.overall_clb,
-      timeUsedPct: Math.round(usedPct), allottedSec: s.allotted, usedSec: Math.round(s.allotted * usedPct / 100),
+      timeUsedPct: s.cfg.untimed ? null : Math.round(usedPct), allottedSec: s.allotted, usedSec: Math.round(s.allotted * usedPct / 100),
       timedOut: !!timedOut, errors: errs
     };
     DB.addAttempt(attempt);
@@ -5649,7 +5658,7 @@ function buildStudyPlan(attempts, errors) {
   }
 
   // 4. time discipline
-  const timed = attempts.filter(a => typeof a.timeUsedPct === 'number');
+  const timed = attempts.filter(a => typeof a.timeUsedPct === 'number');   // null = untimed practice
   const avg = timed.length ? timed.reduce((s, a) => s + a.timeUsedPct, 0) / timed.length : 100;
   if (timed.length >= 2 && avg < 85) {
     plan.push({
@@ -5700,7 +5709,7 @@ function renderDashboard() {
   wrap.appendChild(head);
 
   // ---- headline numbers ----
-  const timeUse = attempts.filter(a => typeof a.timeUsedPct === 'number');
+  const timeUse = attempts.filter(a => typeof a.timeUsedPct === 'number');   // null = untimed practice
   const avgTime = timeUse.length ? Math.round(timeUse.reduce((s, a) => s + a.timeUsedPct, 0) / timeUse.length) : 0;
   const prod = attempts.filter(a => a.module === 'writing' || a.module === 'speaking');
   const avgTpl = prod.length ? (prod.reduce((s, a) => s + (a.analysis && a.analysis.templates ? a.analysis.templates.total : 0), 0) / prod.length).toFixed(1) : '0.0';
@@ -5853,49 +5862,106 @@ function renderDashboard() {
   setScreen(wrap);
 }
 
-/* ---------------- 50.4 DRILL ---------------- */
+/* ---------------- 50.4 DRILL ----------------
+   All twenty task types on one screen, each showing how you have actually done
+   on it. Borrowed from ExamHero, whose question bank is organised the same way:
+   seeing every part at once, with your own accuracy on it, answers "what should
+   I practise" far better than a list of buttons grouped by module does. */
+function drillStats(attempts) {
+  const st = {};
+  const key = (m, t) => m + ':' + t;
+  attempts.forEach(a => {
+    if (a.module === 'listening' || a.module === 'reading') {
+      (a.perPart || []).forEach(p => {
+        const k = key(a.module, p.part);
+        if (!st[k]) st[k] = { correct: 0, total: 0, runs: 0 };
+        st[k].correct += p.correct; st[k].total += p.total; st[k].runs++;
+      });
+    } else if (a.rating) {
+      const k = key(a.module, a.task);
+      if (!st[k]) st[k] = { bands: [], runs: 0 };
+      st[k].bands.push(a.rating.overall_clb); st[k].runs++;
+    }
+  });
+  return st;
+}
+
 function renderDrill() {
-  const wrap = el('div', { class: 'wrap' });
-  wrap.appendChild(el('div', {
-    class: 'card', html: '<h1>Drill mode</h1><p class="muted">One task type, on demand, under a proportional clock. ' +
-      'Use this daily; use Section mode two or three times a week.</p>'
-  }));
+  const wrap = el('div', { class: 'wrap wide' });
+  const attempts = DB.attempts();
+  const st = drillStats(attempts);
+  const untimed = { on: false };
 
-  const mkCard = (title, note, buttons) => {
-    const c = el('div', { class: 'card' });
-    c.innerHTML = '<h3>' + title + '</h3><p class="small muted">' + note + '</p>';
-    const row = el('div', { class: 'row' });
-    buttons.forEach(b => {
-      const btn = el('button', { class: 'btn ghost sm', text: b.label });
-      btn.onclick = b.fn;
-      row.appendChild(btn);
-    });
-    c.appendChild(row);
-    return c;
+  const head = el('div', { class: 'card' });
+  head.innerHTML = '<h1>Practise one task type</h1>' +
+    '<p class="muted">Every part of the test, with how you have done on it so far. ' +
+    'Weakest first is usually the right answer.</p>';
+  const modeRow = el('div', { class: 'row', style: 'margin-top:6px' });
+  const mkMode = (label, on, note) => {
+    const b = el('button', { class: 'btn ' + (on ? '' : 'ghost') + ' sm', text: label, title: note });
+    b.onclick = () => {
+      untimed.on = (label.indexOf('Practice') === 0);
+      $$('.modebtn', modeRow).forEach(x => x.className = 'btn ghost sm modebtn');
+      b.className = 'btn sm modebtn';
+      $('#modenote').textContent = untimed.on
+        ? 'Untimed: no clock, no early-submit warning. For learning the format.'
+        : 'Timed: real clock, and the early-submit gate. For measuring yourself.';
+    };
+    b.classList.add('modebtn');
+    return b;
   };
+  modeRow.appendChild(mkMode('Test (timed)', true));
+  modeRow.appendChild(mkMode('Practice (untimed)', false));
+  modeRow.appendChild(el('span', { id: 'modenote', class: 'tiny muted', text: 'Timed: real clock, and the early-submit gate. For measuring yourself.' }));
+  head.appendChild(modeRow);
+  wrap.appendChild(head);
 
-  wrap.appendChild(mkCard('Listening', 'Audio plays once. No replay, no transcript until review.',
-    [1, 2, 3, 4, 5, 6].map(p => ({
-      label: 'Part ' + p + ' · ' + LISTENING_SPEC[p].name + ' (' + LISTENING_SPEC[p].q + 'Q)',
-      fn: () => Listening.start({ mode: 'drill', parts: [p] })
-    }))));
+  const groups = [
+    { m: 'listening', label: 'Listening', parts: [1, 2, 3, 4, 5, 6], spec: LISTENING_SPEC, unit: 'Part' },
+    { m: 'reading', label: 'Reading', parts: [1, 2, 3, 4], spec: READING_SPEC, unit: 'Part' },
+    { m: 'writing', label: 'Writing', parts: [1, 2], spec: { 1: { name: 'Writing an Email' }, 2: { name: 'Responding to Survey Questions' } }, unit: 'Task' },
+    { m: 'speaking', label: 'Speaking', parts: [1, 2, 3, 4, 5, 6, 7, 8], spec: SPEAKING_SPEC, unit: 'Task' }
+  ];
 
-  wrap.appendChild(mkCard('Reading', 'Passage and questions side by side, as on the real test.',
-    [1, 2, 3, 4].map(p => ({
-      label: 'Part ' + p + ' · ' + READING_SPEC[p].name + ' (' + READING_SPEC[p].q + 'Q)',
-      fn: () => Reading.start({ mode: 'drill', parts: [p] })
-    }))));
-
-  wrap.appendChild(mkCard('Writing', 'Full clock, live word count, proofread gate, rubric-mapped rating.', [
-    { label: 'Task 1 · Email (27 min)', fn: () => Writing.start({ mode: 'drill', tasks: [1] }) },
-    { label: 'Task 2 · Survey (26 min)', fn: () => Writing.start({ mode: 'drill', tasks: [2] }) }
-  ]));
-
-  wrap.appendChild(mkCard('Speaking', 'Prep starts automatically; recording starts automatically. No re-record.',
-    [1, 2, 3, 4, 5, 6, 7, 8].map(t => ({
-      label: 'Task ' + t + ' · ' + SPEAKING_SPEC[t].name,
-      fn: () => Speaking.start({ mode: 'drill', tasks: [t] })
-    }))));
+  groups.forEach(g => {
+    const card = el('div', { class: 'card' });
+    card.innerHTML = '<h3>' + g.label + '</h3>';
+    const grid = el('div', { class: 'grid ' + (g.parts.length > 4 ? 'g4' : 'g2') });
+    g.parts.forEach(t => {
+      const s = st[g.m + ':' + t];
+      const cell = el('button', {
+        class: 'card tight',
+        style: 'text-align:left;cursor:pointer;margin:0;border-width:1px;background:#fff;width:100%',
+        'aria-label': g.label + ' ' + g.unit + ' ' + t + ' — ' + g.spec[t].name
+      });
+      let stat, cls;
+      if (!s) { stat = 'Not tried'; cls = 'grey'; }
+      else if (g.m === 'listening' || g.m === 'reading') {
+        const pc = Math.round(100 * s.correct / Math.max(1, s.total));
+        stat = pc + '% · ' + s.runs + ' run' + (s.runs === 1 ? '' : 's');
+        cls = pc >= 80 ? 'ok' : pc >= 65 ? 'warn' : 'bad';
+      } else {
+        const best = Math.max.apply(null, s.bands);
+        stat = 'CLB ' + best + ' best · ' + s.runs + ' run' + (s.runs === 1 ? '' : 's');
+        cls = best >= 9 ? 'ok' : best >= 7 ? 'warn' : 'bad';
+      }
+      cell.innerHTML = '<div class="tiny muted">' + g.unit.toUpperCase() + ' ' + t +
+        (g.spec[t].q ? ' · ' + g.spec[t].q + 'Q' : '') + '</div>' +
+        '<div style="font-weight:650;margin:3px 0 6px">' + esc(g.spec[t].name) + '</div>' +
+        '<span class="tag ' + cls + '">' + stat + '</span>';
+      cell.onclick = () => {
+        const cfg = { mode: 'drill', untimed: untimed.on };
+        if (g.m === 'listening') Listening.start(Object.assign(cfg, { parts: [t] }));
+        else if (g.m === 'reading') Reading.start(Object.assign(cfg, { parts: [t] }));
+        else if (g.m === 'writing') Writing.start(Object.assign(cfg, { tasks: [t] }));
+        else Speaking.start(Object.assign(cfg, { tasks: [t] }));
+      };
+      grid.appendChild(cell);
+    });
+    card.appendChild(grid);
+    if (g.m === 'speaking') card.appendChild(el('p', { class: 'tiny muted', style: 'margin-top:10px', text: 'Speaking is always timed — the prep and response limits are the task.' }));
+    wrap.appendChild(card);
+  });
 
   setScreen(wrap);
 }

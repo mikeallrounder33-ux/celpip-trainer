@@ -156,7 +156,7 @@ function buildStudyPlan(attempts, errors) {
   }
 
   // 4. time discipline
-  const timed = attempts.filter(a => typeof a.timeUsedPct === 'number');
+  const timed = attempts.filter(a => typeof a.timeUsedPct === 'number');   // null = untimed practice
   const avg = timed.length ? timed.reduce((s, a) => s + a.timeUsedPct, 0) / timed.length : 100;
   if (timed.length >= 2 && avg < 85) {
     plan.push({
@@ -207,7 +207,7 @@ function renderDashboard() {
   wrap.appendChild(head);
 
   // ---- headline numbers ----
-  const timeUse = attempts.filter(a => typeof a.timeUsedPct === 'number');
+  const timeUse = attempts.filter(a => typeof a.timeUsedPct === 'number');   // null = untimed practice
   const avgTime = timeUse.length ? Math.round(timeUse.reduce((s, a) => s + a.timeUsedPct, 0) / timeUse.length) : 0;
   const prod = attempts.filter(a => a.module === 'writing' || a.module === 'speaking');
   const avgTpl = prod.length ? (prod.reduce((s, a) => s + (a.analysis && a.analysis.templates ? a.analysis.templates.total : 0), 0) / prod.length).toFixed(1) : '0.0';
@@ -360,49 +360,106 @@ function renderDashboard() {
   setScreen(wrap);
 }
 
-/* ---------------- 50.4 DRILL ---------------- */
+/* ---------------- 50.4 DRILL ----------------
+   All twenty task types on one screen, each showing how you have actually done
+   on it. Borrowed from ExamHero, whose question bank is organised the same way:
+   seeing every part at once, with your own accuracy on it, answers "what should
+   I practise" far better than a list of buttons grouped by module does. */
+function drillStats(attempts) {
+  const st = {};
+  const key = (m, t) => m + ':' + t;
+  attempts.forEach(a => {
+    if (a.module === 'listening' || a.module === 'reading') {
+      (a.perPart || []).forEach(p => {
+        const k = key(a.module, p.part);
+        if (!st[k]) st[k] = { correct: 0, total: 0, runs: 0 };
+        st[k].correct += p.correct; st[k].total += p.total; st[k].runs++;
+      });
+    } else if (a.rating) {
+      const k = key(a.module, a.task);
+      if (!st[k]) st[k] = { bands: [], runs: 0 };
+      st[k].bands.push(a.rating.overall_clb); st[k].runs++;
+    }
+  });
+  return st;
+}
+
 function renderDrill() {
-  const wrap = el('div', { class: 'wrap' });
-  wrap.appendChild(el('div', {
-    class: 'card', html: '<h1>Drill mode</h1><p class="muted">One task type, on demand, under a proportional clock. ' +
-      'Use this daily; use Section mode two or three times a week.</p>'
-  }));
+  const wrap = el('div', { class: 'wrap wide' });
+  const attempts = DB.attempts();
+  const st = drillStats(attempts);
+  const untimed = { on: false };
 
-  const mkCard = (title, note, buttons) => {
-    const c = el('div', { class: 'card' });
-    c.innerHTML = '<h3>' + title + '</h3><p class="small muted">' + note + '</p>';
-    const row = el('div', { class: 'row' });
-    buttons.forEach(b => {
-      const btn = el('button', { class: 'btn ghost sm', text: b.label });
-      btn.onclick = b.fn;
-      row.appendChild(btn);
-    });
-    c.appendChild(row);
-    return c;
+  const head = el('div', { class: 'card' });
+  head.innerHTML = '<h1>Practise one task type</h1>' +
+    '<p class="muted">Every part of the test, with how you have done on it so far. ' +
+    'Weakest first is usually the right answer.</p>';
+  const modeRow = el('div', { class: 'row', style: 'margin-top:6px' });
+  const mkMode = (label, on, note) => {
+    const b = el('button', { class: 'btn ' + (on ? '' : 'ghost') + ' sm', text: label, title: note });
+    b.onclick = () => {
+      untimed.on = (label.indexOf('Practice') === 0);
+      $$('.modebtn', modeRow).forEach(x => x.className = 'btn ghost sm modebtn');
+      b.className = 'btn sm modebtn';
+      $('#modenote').textContent = untimed.on
+        ? 'Untimed: no clock, no early-submit warning. For learning the format.'
+        : 'Timed: real clock, and the early-submit gate. For measuring yourself.';
+    };
+    b.classList.add('modebtn');
+    return b;
   };
+  modeRow.appendChild(mkMode('Test (timed)', true));
+  modeRow.appendChild(mkMode('Practice (untimed)', false));
+  modeRow.appendChild(el('span', { id: 'modenote', class: 'tiny muted', text: 'Timed: real clock, and the early-submit gate. For measuring yourself.' }));
+  head.appendChild(modeRow);
+  wrap.appendChild(head);
 
-  wrap.appendChild(mkCard('Listening', 'Audio plays once. No replay, no transcript until review.',
-    [1, 2, 3, 4, 5, 6].map(p => ({
-      label: 'Part ' + p + ' · ' + LISTENING_SPEC[p].name + ' (' + LISTENING_SPEC[p].q + 'Q)',
-      fn: () => Listening.start({ mode: 'drill', parts: [p] })
-    }))));
+  const groups = [
+    { m: 'listening', label: 'Listening', parts: [1, 2, 3, 4, 5, 6], spec: LISTENING_SPEC, unit: 'Part' },
+    { m: 'reading', label: 'Reading', parts: [1, 2, 3, 4], spec: READING_SPEC, unit: 'Part' },
+    { m: 'writing', label: 'Writing', parts: [1, 2], spec: { 1: { name: 'Writing an Email' }, 2: { name: 'Responding to Survey Questions' } }, unit: 'Task' },
+    { m: 'speaking', label: 'Speaking', parts: [1, 2, 3, 4, 5, 6, 7, 8], spec: SPEAKING_SPEC, unit: 'Task' }
+  ];
 
-  wrap.appendChild(mkCard('Reading', 'Passage and questions side by side, as on the real test.',
-    [1, 2, 3, 4].map(p => ({
-      label: 'Part ' + p + ' · ' + READING_SPEC[p].name + ' (' + READING_SPEC[p].q + 'Q)',
-      fn: () => Reading.start({ mode: 'drill', parts: [p] })
-    }))));
-
-  wrap.appendChild(mkCard('Writing', 'Full clock, live word count, proofread gate, rubric-mapped rating.', [
-    { label: 'Task 1 · Email (27 min)', fn: () => Writing.start({ mode: 'drill', tasks: [1] }) },
-    { label: 'Task 2 · Survey (26 min)', fn: () => Writing.start({ mode: 'drill', tasks: [2] }) }
-  ]));
-
-  wrap.appendChild(mkCard('Speaking', 'Prep starts automatically; recording starts automatically. No re-record.',
-    [1, 2, 3, 4, 5, 6, 7, 8].map(t => ({
-      label: 'Task ' + t + ' · ' + SPEAKING_SPEC[t].name,
-      fn: () => Speaking.start({ mode: 'drill', tasks: [t] })
-    }))));
+  groups.forEach(g => {
+    const card = el('div', { class: 'card' });
+    card.innerHTML = '<h3>' + g.label + '</h3>';
+    const grid = el('div', { class: 'grid ' + (g.parts.length > 4 ? 'g4' : 'g2') });
+    g.parts.forEach(t => {
+      const s = st[g.m + ':' + t];
+      const cell = el('button', {
+        class: 'card tight',
+        style: 'text-align:left;cursor:pointer;margin:0;border-width:1px;background:#fff;width:100%',
+        'aria-label': g.label + ' ' + g.unit + ' ' + t + ' — ' + g.spec[t].name
+      });
+      let stat, cls;
+      if (!s) { stat = 'Not tried'; cls = 'grey'; }
+      else if (g.m === 'listening' || g.m === 'reading') {
+        const pc = Math.round(100 * s.correct / Math.max(1, s.total));
+        stat = pc + '% · ' + s.runs + ' run' + (s.runs === 1 ? '' : 's');
+        cls = pc >= 80 ? 'ok' : pc >= 65 ? 'warn' : 'bad';
+      } else {
+        const best = Math.max.apply(null, s.bands);
+        stat = 'CLB ' + best + ' best · ' + s.runs + ' run' + (s.runs === 1 ? '' : 's');
+        cls = best >= 9 ? 'ok' : best >= 7 ? 'warn' : 'bad';
+      }
+      cell.innerHTML = '<div class="tiny muted">' + g.unit.toUpperCase() + ' ' + t +
+        (g.spec[t].q ? ' · ' + g.spec[t].q + 'Q' : '') + '</div>' +
+        '<div style="font-weight:650;margin:3px 0 6px">' + esc(g.spec[t].name) + '</div>' +
+        '<span class="tag ' + cls + '">' + stat + '</span>';
+      cell.onclick = () => {
+        const cfg = { mode: 'drill', untimed: untimed.on };
+        if (g.m === 'listening') Listening.start(Object.assign(cfg, { parts: [t] }));
+        else if (g.m === 'reading') Reading.start(Object.assign(cfg, { parts: [t] }));
+        else if (g.m === 'writing') Writing.start(Object.assign(cfg, { tasks: [t] }));
+        else Speaking.start(Object.assign(cfg, { tasks: [t] }));
+      };
+      grid.appendChild(cell);
+    });
+    card.appendChild(grid);
+    if (g.m === 'speaking') card.appendChild(el('p', { class: 'tiny muted', style: 'margin-top:10px', text: 'Speaking is always timed — the prep and response limits are the task.' }));
+    wrap.appendChild(card);
+  });
 
   setScreen(wrap);
 }

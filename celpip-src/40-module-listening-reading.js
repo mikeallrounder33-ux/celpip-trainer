@@ -62,13 +62,14 @@ const Listening = {
     }
 
     const qTotal = items.filter(i => !i._trial).reduce((a, i) => a + i.blocks.reduce((x, b) => x + b.questions.length, 0), 0);
-    const allotted = cfg.mode === 'drill' ? partAllotment('listening', qTotal) : MODULE_TIME.listening;
+    const allotted = cfg.untimed ? 3 * 3600 : (cfg.mode === 'drill' ? partAllotment('listening', qTotal) : MODULE_TIME.listening);
 
     this.s = {
       cfg, items, qTotal, allotted, answers: [], idx: 0, blockIdx: 0,
       phase: 'intro', audioDone: false, speaking: null,
       timer: new Timer(allotted, null, () => this.finish(true))
     };
+    if (cfg.untimed) this.s.timer.untimed = true;
     this.s.timer.start();
     this.render();
   },
@@ -82,7 +83,8 @@ const Listening = {
     wrap.appendChild(examChrome(
       'Listening — Part ' + item.part + ': ' + spec.name,
       'Passage ' + (s.idx + 1) + ' of ' + s.items.length +
-      (item.blocks.length > 1 ? '  ·  Section ' + (s.blockIdx + 1) + ' of ' + item.blocks.length : ''),
+      (item.blocks.length > 1 ? '  ·  Section ' + (s.blockIdx + 1) + ' of ' + item.blocks.length : '') +
+      (s.cfg.untimed ? '  ·  Untimed practice' : ''),
       s.timer));
     const body = el('div', { class: 'wrap' });
     wrap.appendChild(body);
@@ -222,7 +224,7 @@ const Listening = {
       clb: full ? clbFromRaw(raw).label : null,
       perPart: Object.values(perPart),
       trialCount: s.items.filter(i => i._trial).reduce((a, i) => a + i.blocks.reduce((x, b) => x + b.questions.length, 0), 0),
-      answers: s.answers, items: s.items, timeUsedPct: usedPct,
+      answers: s.answers, items: s.items, timeUsedPct: s.cfg.untimed ? null : usedPct,
       allottedSec: s.allotted, usedSec: Math.round(s.timer.usedSec()), timedOut: !!timedOut
     };
     DB.addAttempt(attempt);
@@ -327,8 +329,9 @@ const Reading = {
     }
 
     const qTotal = items.filter(i => !i._trial).reduce((a, i) => a + readingQCount(i), 0);
-    const allotted = cfg.mode === 'drill' ? partAllotment('reading', qTotal) : MODULE_TIME.reading;
+    const allotted = cfg.untimed ? 3 * 3600 : (cfg.mode === 'drill' ? partAllotment('reading', qTotal) : MODULE_TIME.reading);
     this.s = { cfg, items, qTotal, allotted, idx: 0, answers: {}, timer: new Timer(allotted, null, () => this.finish(true)) };
+    if (cfg.untimed) this.s.timer.untimed = true;
     this.s.timer.start();
     this.render();
   },
@@ -345,7 +348,7 @@ const Reading = {
     const A = this.ans(item);
     const wrap = el('div');
     wrap.appendChild(examChrome('Reading — Part ' + item.part + ': ' + spec.name,
-      'Passage ' + (s.idx + 1) + ' of ' + s.items.length, s.timer));
+      'Passage ' + (s.idx + 1) + ' of ' + s.items.length + (s.cfg.untimed ? '  ·  Untimed practice' : ''), s.timer));
     const body = el('div', { class: 'wrap wide' });
     wrap.appendChild(body);
 
@@ -448,7 +451,7 @@ const Reading = {
   async confirmFinish() {
     const s = this.s;
     const leftPct = 100 - s.timer.usedPct();
-    if (leftPct > 20 && !s.warned) {
+    if (!s.cfg.untimed && leftPct > 20 && !s.warned) {
       s.warned = true;
       await modal({
         title: 'You still have ' + fmtTime(s.timer.left) + ' left',
@@ -485,7 +488,7 @@ const Reading = {
       raw, total, isFullSection: full, clb: full ? clbFromRaw(raw).label : null,
       perPart, trialCount: s.items.filter(i => i._trial).reduce((a, i) => a + readingQCount(i), 0),
       answers: detail, rawAnswers: s.answers, items: s.items,
-      timeUsedPct: Math.round(s.timer.usedPct()), allottedSec: s.allotted,
+      timeUsedPct: s.cfg.untimed ? null : Math.round(s.timer.usedPct()), allottedSec: s.allotted,
       usedSec: Math.round(s.timer.usedSec()), timedOut: !!timedOut
     };
     DB.addAttempt(attempt);
@@ -510,7 +513,7 @@ function showLRResult(a) {
     '<div class="row" style="gap:26px;align-items:flex-end">' +
     '<div><div class="tiny muted">RAW SCORE</div><div style="font-size:40px;font-weight:750;line-height:1">' + a.raw + '<span class="muted" style="font-size:20px"> / ' + a.total + '</span></div></div>' +
     '<div><div class="tiny muted">ESTIMATED BAND</div><div style="font-size:40px;font-weight:750;line-height:1">' + (est ? esc(est.label) : '—') + '</div></div>' +
-    '<div><div class="tiny muted">TIME USED</div><div style="font-size:40px;font-weight:750;line-height:1">' + a.timeUsedPct + '%</div></div>' +
+    '<div><div class="tiny muted">TIME USED</div><div style="font-size:40px;font-weight:750;line-height:1">' + (a.timeUsedPct == null ? '—' : a.timeUsedPct + '%') + '</div></div>' +
     '</div>' +
     (est
       ? '<p class="tiny muted" style="margin-top:12px">This is an <strong>estimate only</strong>, mapped from your raw score out of 38. It is not an official CELPIP result and the real conversion varies by test form.</p>'
@@ -519,7 +522,7 @@ function showLRResult(a) {
       ' unscored trial questions</strong>, mixed in where you could not identify them — exactly as the real test does. ' +
       'They are excluded from the score above. If a passage felt strange, that may be why.</div>' : '') +
     (a.timedOut ? '<div class="flagline bad" style="margin-top:10px">Time ran out before you finished. Unanswered questions were marked wrong.</div>' : '') +
-    (a.timeUsedPct < 80 ? '<div class="flagline" style="margin-top:10px">You used only ' + a.timeUsedPct + '% of the allotted time. On the real test, unused time is wasted marks — go back over the items you were unsure about.</div>' : '');
+    (a.timeUsedPct != null && a.timeUsedPct < 80 ? '<div class="flagline" style="margin-top:10px">You used only ' + a.timeUsedPct + '% of the allotted time. On the real test, unused time is wasted marks — go back over the items you were unsure about.</div>' : '');
   wrap.appendChild(head);
 
   const parts = el('div', { class: 'card' });

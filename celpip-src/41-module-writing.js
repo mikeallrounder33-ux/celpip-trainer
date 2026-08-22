@@ -31,8 +31,9 @@ const Writing = {
     const item = s.items[s.idx];
     s.text = '';
     s.warned = false;
-    s.allotted = WRITING_TIME[item.task];
+    s.allotted = s.cfg.untimed ? 3 * 3600 : WRITING_TIME[item.task];
     s.timer = new Timer(s.allotted, null, () => this.hardStop());
+    if (s.cfg.untimed) s.timer.untimed = true;
     s.timer.start();
     this.render();
   },
@@ -43,8 +44,7 @@ const Writing = {
     const wrap = el('div');
     wrap.appendChild(examChrome(
       'Writing — Task ' + item.task + ': ' + (item.task === 1 ? 'Writing an Email' : 'Responding to Survey Questions'),
-      (item.task === 1 ? '27 minutes' : '26 minutes') + '  ·  150–200 words  ·  target CLB ' + (item.clb || '?') +
-      '  ·  ' + (item._source === 'api' ? 'generated' : 'offline bank'),
+      (s.cfg.untimed ? 'Untimed practice' : (item.task === 1 ? '27 minutes' : '26 minutes')) + '  ·  150–200 words',
       s.timer));
     const body = el('div', { class: 'wrap wide' });
     wrap.appendChild(body);
@@ -116,7 +116,7 @@ const Writing = {
   async trySubmit() {
     const s = this.s;
     const leftPct = 100 - s.timer.usedPct();
-    if (leftPct > 20 && !s.warned) {
+    if (!s.cfg.untimed && leftPct > 20 && !s.warned) {
       s.warned = true;
       await modal({
         title: 'You have ' + fmtTime(s.timer.left) + ' left',
@@ -232,7 +232,7 @@ const Writing = {
         templates: tp, register: reg, bulletsCovered: res.rating.bullets_covered || res.analysis.bulletsCovered
       },
       clbNum: res.rating.overall_clb, clb: 'CLB ' + res.rating.overall_clb,
-      timeUsedPct: Math.round(usedPct), allottedSec: s.allotted, usedSec: Math.round(s.allotted * usedPct / 100),
+      timeUsedPct: s.cfg.untimed ? null : Math.round(usedPct), allottedSec: s.allotted, usedSec: Math.round(s.allotted * usedPct / 100),
       timedOut: !!timedOut, errors: errs
     };
     DB.addAttempt(attempt);
