@@ -15,6 +15,7 @@ cat \
   "$DIR/24-bank-writing-speaking.js" \
   "$DIR/25-bank-reference-writing.js" \
   "$DIR/26-bank-reference-speaking.js" \
+  "$DIR/27-task-guides.js" \
   "$DIR/30-generator-rater.js" \
   "$DIR/40-module-listening-reading.js" \
   "$DIR/41-module-writing.js" \

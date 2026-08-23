@@ -5,7 +5,7 @@
 /* ---------------- 50.1 navigation ---------------- */
 const ROUTES = [
   ['dashboard', 'Dashboard'], ['drill', 'Drill'], ['section', 'Section'],
-  ['mock', 'Full Mock'], ['errors', 'Error Log'], ['review', 'Review'], ['settings', 'Settings']
+  ['mock', 'Full Mock'], ['guides', 'Guides'], ['errors', 'Error Log'], ['review', 'Review'], ['settings', 'Settings']
 ];
 function renderNav() {
   const nav = $('#nav');
@@ -56,7 +56,7 @@ function go(route, params) {
   renderNav();
   ({
     dashboard: renderDashboard, drill: renderDrill, section: renderSection,
-    mock: renderMock, errors: renderErrorLog, review: renderReview, settings: renderSettings
+    mock: renderMock, guides: renderGuides, errors: renderErrorLog, review: renderReview, settings: renderSettings
   }[route] || renderDashboard)();
 }
 
@@ -95,8 +95,43 @@ function lineChart(series, opts) {
 /* ---------------- 50.2b STUDY PLAN ----------------
    No model needed. Everything here is already recorded; it was simply never
    turned into an instruction. Ordered by what costs the most marks. */
-function buildStudyPlan(attempts, errors) {
+function buildStudyPlan(attempts, errors, goal, daysLeft) {
   const plan = [];
+  goal = goal || {};
+
+  // Deadline first: with a test booked, what to do changes with how long is left.
+  if (goal.targetCLB && typeof daysLeft === 'number' && daysLeft >= 0) {
+    const bands = {};
+    attempts.forEach(a => {
+      const b = attemptCLB(a);
+      if (typeof b === 'number' && b > 0) bands[a.module] = Math.max(bands[a.module] || 0, b);
+    });
+    const weakMod = ['listening', 'reading', 'writing', 'speaking']
+      .filter(m => bands[m]).sort((x, y) => bands[x] - bands[y])[0];
+    const gap = weakMod ? goal.targetCLB - bands[weakMod] : null;
+
+    if (daysLeft <= 3) {
+      plan.push({
+        what: 'Sit one full mock, then stop drilling',
+        why: daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' left. This close, format familiarity and rest beat new practice. Do not learn anything new now.',
+        action: () => go('mock')
+      });
+    } else if (daysLeft <= 14 && weakMod && gap > 0) {
+      plan.push({
+        what: 'Focus everything on ' + weakMod[0].toUpperCase() + weakMod.slice(1),
+        why: daysLeft + ' days left, and ' + weakMod + ' is your weakest at CLB ' + bands[weakMod] +
+             ' against a target of ' + goal.targetCLB + '. A ' + gap + '-band gap in two weeks needs one module, not four.',
+        action: () => go('section')
+      });
+    } else if (weakMod && gap <= 0) {
+      plan.push({
+        what: 'Hold your level with one full mock a week',
+        why: 'You are already at or above CLB ' + goal.targetCLB + ' on every module you have attempted. The risk now is decay, not gaps.',
+        action: () => go('mock')
+      });
+    }
+  }
+
 
   // 1. weakest Listening/Reading part, pooled
   const pooled = {};
@@ -238,8 +273,43 @@ function renderDashboard() {
   trend.appendChild(lineChart(series, { w: 900, h: 220 }));
   wrap.appendChild(trend);
 
+  // ---- goal: target band and test date drive the plan's urgency ----
+  const goal = DB.get('celpip_goal', {});
+  const gc = el('div', { class: 'card' });
+  const daysLeft = goal.testDate ? Math.ceil((new Date(goal.testDate + 'T00:00:00') - Date.now()) / 864e5) : null;
+  gc.innerHTML = '<h3>Your target</h3>';
+  const grow = el('div', { class: 'row', style: 'align-items:flex-end;gap:14px' });
+  const tb = el('div');
+  tb.innerHTML = '<label class="fl">Target band</label>';
+  const tsel = el('select', { style: 'width:auto;min-width:130px' });
+  [0, 6, 7, 8, 9, 10, 11].forEach(n => tsel.appendChild(el('option', { value: String(n), text: n ? 'CLB ' + n : 'not set' })));
+  tsel.value = String(goal.targetCLB || 0);
+  tb.appendChild(tsel);
+  const db_ = el('div');
+  db_.innerHTML = '<label class="fl">Test date</label>';
+  const dinp = el('input', { type: 'date', value: goal.testDate || '', style: 'width:auto' });
+  db_.appendChild(dinp);
+  const sv = el('button', { class: 'btn sm', text: 'Save' });
+  sv.onclick = () => {
+    DB.set('celpip_goal', { targetCLB: parseInt(tsel.value, 10) || 0, testDate: dinp.value || '' });
+    toast('Target saved.', 'ok'); go('dashboard');
+  };
+  grow.appendChild(tb); grow.appendChild(db_); grow.appendChild(sv);
+  gc.appendChild(grow);
+  if (goal.targetCLB && daysLeft !== null) {
+    gc.appendChild(el('p', {
+      class: 'small', style: 'margin-top:10px',
+      html: daysLeft >= 0
+        ? '<strong>' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + '</strong> until your test, aiming for <strong>CLB ' + goal.targetCLB + '</strong>.'
+        : 'Your test date has passed. Update it or clear it.'
+    }));
+  } else {
+    gc.appendChild(el('p', { class: 'tiny muted', style: 'margin-top:10px', text: 'Setting these makes the plan below urgency-aware — it changes what it tells you to do with three days left versus three weeks.' }));
+  }
+  wrap.appendChild(gc);
+
   // ---- study plan, derived from what the app already knows ----
-  const plan = buildStudyPlan(attempts, errors);
+  const plan = buildStudyPlan(attempts, errors, goal, daysLeft);
   const pc = el('div', { class: 'card' });
   pc.innerHTML = '<h3>What to do next</h3><p class="tiny muted">Generated from your own results — ' +
     'weakest parts first, then what you have avoided, then the errors that keep coming back.</p>';
@@ -360,6 +430,47 @@ function renderDashboard() {
   setScreen(wrap);
 }
 
+/* ---------------- 50.3b TASK GUIDES ----------------
+   Strategy for each of the twenty task types. The app could previously test
+   you and mark you, but never explain how a task is meant to be approached. */
+function guideCard(key, open) {
+  const g = TASK_GUIDES[key];
+  if (!g) return el('div');
+  const d = el('details', { class: 'card' });
+  if (open) d.setAttribute('open', 'open');
+  const modLabel = key.split(':')[0], num = key.split(':')[1];
+  const unit = (modLabel === 'writing' || modLabel === 'speaking') ? 'Task' : 'Part';
+  d.innerHTML =
+    '<summary style="cursor:pointer;font-weight:650;font-size:16px">' +
+      esc(modLabel[0].toUpperCase() + modLabel.slice(1)) + ' ' + unit + ' ' + num + ' — ' + esc(g.name) +
+    '</summary>' +
+    '<div style="margin-top:12px;display:flex;flex-direction:column;gap:12px">' +
+      '<div><div class="tiny muted" style="letter-spacing:.05em">WHAT YOU FACE</div><div class="small">' + esc(g.format) + '</div></div>' +
+      '<div class="flagline bad"><strong>The trap:</strong> ' + esc(g.trap) + '</div>' +
+      '<div><div class="tiny muted" style="letter-spacing:.05em">METHOD</div><ol class="clean">' +
+        g.method.map(m => '<li>' + esc(m) + '</li>').join('') + '</ol></div>' +
+      '<div class="flagline"><strong>What holds your band down here:</strong> ' + esc(g.caps) + '</div>' +
+    '</div>';
+  return d;
+}
+
+function renderGuides() {
+  const wrap = el('div', { class: 'wrap' });
+  const focus = APP.params && APP.params.key;
+  const head = el('div', { class: 'card' });
+  head.innerHTML = '<h1>Task guides</h1><p class="muted">How each of the twenty task types is meant to be ' +
+    'approached — the format, the trap that costs most people marks, a method, and what caps your band on that ' +
+    'task specifically. Read the guide for a task before you drill it.</p>';
+  wrap.appendChild(head);
+
+  [['listening', [1,2,3,4,5,6]], ['reading', [1,2,3,4]], ['writing', [1,2]], ['speaking', [1,2,3,4,5,6,7,8]]]
+    .forEach(([m, parts]) => {
+      wrap.appendChild(el('h3', { text: m[0].toUpperCase() + m.slice(1), style: 'margin:22px 0 10px' }));
+      parts.forEach(t => wrap.appendChild(guideCard(m + ':' + t, focus === m + ':' + t)));
+    });
+  setScreen(wrap);
+}
+
 /* ---------------- 50.4 DRILL ----------------
    All twenty task types on one screen, each showing how you have actually done
    on it. Borrowed from ExamHero, whose question bank is organised the same way:
@@ -454,7 +565,12 @@ function renderDrill() {
         else if (g.m === 'writing') Writing.start(Object.assign(cfg, { tasks: [t] }));
         else Speaking.start(Object.assign(cfg, { tasks: [t] }));
       };
-      grid.appendChild(cell);
+      const holder = el('div', { style: 'display:flex;flex-direction:column;gap:6px' });
+      holder.appendChild(cell);
+      const gl = el('button', { class: 'btn ghost sm', text: 'Read the guide', style: 'align-self:flex-start' });
+      gl.onclick = () => go('guides', { key: g.m + ':' + t });
+      holder.appendChild(gl);
+      grid.appendChild(holder);
     });
     card.appendChild(grid);
     if (g.m === 'speaking') card.appendChild(el('p', { class: 'tiny muted', style: 'margin-top:10px', text: 'Speaking is always timed — the prep and response limits are the task.' }));
