@@ -637,25 +637,50 @@ const TTS = {
     });
     return map;
   },
+  /* Bank segments are {s, t}; the settings audio test passes {speaker, text}.
+     Read both. Getting this wrong previously produced an utterance of
+     `undefined`, which the browser dutifully spoke as the single word
+     "undefined" — audio that started and ended in the same millisecond. */
+  segText(seg) { return (seg && (seg.t != null ? seg.t : seg.text)) || ''; },
+  segWho(seg) { return (seg && (seg.s != null ? seg.s : seg.speaker)) || ''; },
+
   speakSequence(segments, voiceMap, onSegment, onDone) {
     if (!window.speechSynthesis) { onDone && onDone(false); return { cancel() { } }; }
     speechSynthesis.cancel();
-    let i = 0, cancelled = false;
+    let i = 0, cancelled = false, spokeAnything = false, watchdog = null;
+    const clearDog = () => { if (watchdog) { clearTimeout(watchdog); watchdog = null; } };
+
     const next = () => {
       if (cancelled) return;
-      if (i >= segments.length) { onDone && onDone(true); return; }
+      clearDog();
+      if (i >= segments.length) { onDone && onDone(spokeAnything); return; }
       const seg = segments[i];
+      const text = TTS.segText(seg);
+      const who = TTS.segWho(seg);
       onSegment && onSegment(i, seg);
-      const u = new SpeechSynthesisUtterance(seg.text);
-      const vm = voiceMap[seg.speaker] || {};
+
+      if (!text.trim()) { i++; setTimeout(next, 60); return; }   // never speak "undefined"
+
+      const u = new SpeechSynthesisUtterance(text);
+      const vm = voiceMap[who] || {};
       if (vm.voice) u.voice = vm.voice;
       u.rate = vm.rate || 1; u.pitch = vm.pitch || 1; u.lang = (vm.voice && vm.voice.lang) || 'en-CA';
-      u.onend = () => { i++; setTimeout(next, 260); };
-      u.onerror = () => { i++; setTimeout(next, 260); };
+
+      const advance = () => { clearDog(); i++; setTimeout(next, 260); };
+      u.onstart = () => { spokeAnything = true; };
+      u.onend = advance;
+      u.onerror = advance;
+
+      // Chrome silently stops long utterances and fires no event. Estimate the
+      // duration from the word count and move on if nothing has come back well
+      // past that, so a failure cannot strand the candidate on "Audio playing".
+      const est = (text.split(/\s+/).length / 2.4) * 1000;
+      watchdog = setTimeout(advance, Math.max(8000, est * 2.2));
+
       speechSynthesis.speak(u);
     };
     next();
-    return { cancel() { cancelled = true; speechSynthesis.cancel(); } };
+    return { cancel() { cancelled = true; clearDog(); speechSynthesis.cancel(); } };
   }
 };
 TTS.init();
